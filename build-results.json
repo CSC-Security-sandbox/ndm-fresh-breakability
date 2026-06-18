@@ -1,0 +1,354 @@
+{
+  "cross_pr_deps": [],
+  "govulncheck": {
+    "main_baseline": {
+      "findings": [],
+      "status": "unknown"
+    },
+    "prs_scanned": 0,
+    "prs_with_new_vulns": 0,
+    "total_new_findings": []
+  },
+  "main_build": {
+    "go": {
+      "exit": -1,
+      "output_tail": "\n",
+      "test_exit": -1,
+      "test_output_tail": "deferred \u2014 per-PR targeted comparison\n"
+    },
+    "npm": {
+      "exit": -1,
+      "output_tail": "\n"
+    },
+    "pip": {
+      "exit": -1,
+      "output_tail": "\n"
+    }
+  },
+  "metadata": {
+    "cli_path": ".github/actions/breakability-check/index.js",
+    "expected_pr_count": 2,
+    "incomplete": true,
+    "missing_pr_count": 2,
+    "missing_pr_numbers": [
+      11,
+      12
+    ],
+    "mode": "advisory",
+    "pr_count": 0,
+    "repo": "unknown/unknown",
+    "requested_pr_numbers": [
+      11,
+      12
+    ],
+    "selected_pr_numbers": [],
+    "subset_requested": true,
+    "timestamp": "2026-06-18T05:28:10Z"
+  },
+  "nestjs_skew": [],
+  "prs": {},
+  "security_posture": {
+    "alert_counts_scope": "repository",
+    "alerts_fixable_by_merging": 0,
+    "alerts_unavailable": true,
+    "cve_fixes": [],
+    "omitted_due_to_subset": {},
+    "orphan_alerts": [],
+    "orphan_alerts_omitted_for_subset": 0,
+    "pr_rows_scope": "selected_prs",
+    "prs_fixing_alerts": {},
+    "prs_with_cves": {},
+    "scope": "subset",
+    "severity_counts": {},
+    "subset_note": "PR-scoped security rows are limited to selected PRs; repository-wide alert counts remain for context.",
+    "subset_pr_numbers": [],
+    "total_cves_in_prs": 0,
+    "total_open_alerts": 0
+  },
+  "workspace_graph": {
+    "consumers": {
+      "@NetApp-Cloud-DataMigrate/api-handler-lib": [
+        {
+          "path": "services/reports-service",
+          "service": "test"
+        },
+        {
+          "path": "services/jobs-service",
+          "service": "job-service"
+        },
+        {
+          "path": "services/admin-service",
+          "service": "admin-service"
+        },
+        {
+          "path": "services/config-service",
+          "service": "config-service"
+        },
+        {
+          "path": "services/db-writer",
+          "service": "db-writer"
+        }
+      ],
+      "@NetApp-Cloud-DataMigrate/auth-lib": [
+        {
+          "path": "services/reports-service",
+          "service": "test"
+        },
+        {
+          "path": "services/jobs-service",
+          "service": "job-service"
+        },
+        {
+          "path": "services/admin-service",
+          "service": "admin-service"
+        },
+        {
+          "path": "services/config-service",
+          "service": "config-service"
+        },
+        {
+          "path": "services/db-writer",
+          "service": "db-writer"
+        }
+      ],
+      "@NetApp-Cloud-DataMigrate/jobs-lib": [
+        {
+          "path": "services/reports-service",
+          "service": "test"
+        },
+        {
+          "path": "services/jobs-service",
+          "service": "job-service"
+        },
+        {
+          "path": "services/db-writer",
+          "service": "db-writer"
+        },
+        {
+          "path": "services/worker",
+          "service": "worker"
+        }
+      ],
+      "@NetApp-Cloud-DataMigrate/logger-lib": [
+        {
+          "path": "lib/api-handler-lib",
+          "service": "@NetApp-Cloud-DataMigrate/api-handler-lib"
+        },
+        {
+          "path": "services/reports-service",
+          "service": "test"
+        },
+        {
+          "path": "services/jobs-service",
+          "service": "job-service"
+        },
+        {
+          "path": "services/admin-service",
+          "service": "admin-service"
+        },
+        {
+          "path": "services/config-service",
+          "service": "config-service"
+        },
+        {
+          "path": "services/db-writer",
+          "service": "db-writer"
+        },
+        {
+          "path": "services/worker",
+          "service": "worker"
+        }
+      ]
+    },
+    "nestjs_skew": [],
+    "packages": {
+      "@NetApp-Cloud-DataMigrate/api-handler-lib": {
+        "internal_deps": [
+          "@netapp-cloud-datamigrate/logger-lib"
+        ],
+        "nestjs_versions": {
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "4.0.4",
+          "@nestjs/core": "11.1.18",
+          "@nestjs/platform-express": "11.1.18"
+        },
+        "path": "lib/api-handler-lib"
+      },
+      "@NetApp-Cloud-DataMigrate/auth-lib": {
+        "internal_deps": [],
+        "nestjs_versions": {
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "4.0.4",
+          "@nestjs/core": "11.1.18"
+        },
+        "path": "lib/auth-lib"
+      },
+      "@NetApp-Cloud-DataMigrate/jobs-lib": {
+        "internal_deps": [],
+        "nestjs_versions": {},
+        "path": "lib/jobs-lib"
+      },
+      "@NetApp-Cloud-DataMigrate/logger-lib": {
+        "internal_deps": [],
+        "nestjs_versions": {
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "4.0.4",
+          "@nestjs/core": "11.1.18",
+          "@nestjs/platform-express": "11.1.18"
+        },
+        "path": "lib/logger-lib"
+      },
+      "admin-service": {
+        "internal_deps": [
+          "@netapp-cloud-datamigrate/api-handler-lib",
+          "@netapp-cloud-datamigrate/auth-lib",
+          "@netapp-cloud-datamigrate/logger-lib"
+        ],
+        "nestjs_versions": {
+          "@nestjs/cli": "11.0.21",
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "4.0.4",
+          "@nestjs/core": "11.1.18",
+          "@nestjs/platform-express": "11.1.18",
+          "@nestjs/schematics": "11.0.10",
+          "@nestjs/swagger": "11.4.2",
+          "@nestjs/testing": "11.1.18",
+          "@nestjs/typeorm": "11.0.1"
+        },
+        "path": "services/admin-service"
+      },
+      "config-service": {
+        "internal_deps": [
+          "@netapp-cloud-datamigrate/api-handler-lib",
+          "@netapp-cloud-datamigrate/auth-lib",
+          "@netapp-cloud-datamigrate/logger-lib"
+        ],
+        "nestjs_versions": {
+          "@nestjs/axios": "4.0.1",
+          "@nestjs/cli": "11.0.21",
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "4.0.4",
+          "@nestjs/core": "11.1.18",
+          "@nestjs/microservices": "11.1.19",
+          "@nestjs/mongoose": "11.0.4",
+          "@nestjs/platform-express": "11.1.18",
+          "@nestjs/platform-socket.io": "11.1.18",
+          "@nestjs/schematics": "11.0.10",
+          "@nestjs/swagger": "11.4.2",
+          "@nestjs/testing": "11.1.18",
+          "@nestjs/typeorm": "11.0.1",
+          "@nestjs/websockets": "11.1.18"
+        },
+        "path": "services/config-service"
+      },
+      "datamigrator-ui": {
+        "internal_deps": [
+          "@netapp/bxp-design-system-react"
+        ],
+        "nestjs_versions": {},
+        "path": "services/datamigrator-ui"
+      },
+      "db-writer": {
+        "internal_deps": [
+          "@netapp-cloud-datamigrate/jobs-lib",
+          "@netapp-cloud-datamigrate/auth-lib",
+          "@netapp-cloud-datamigrate/api-handler-lib",
+          "@netapp-cloud-datamigrate/logger-lib"
+        ],
+        "nestjs_versions": {
+          "@nestjs/axios": "4.0.1",
+          "@nestjs/cli": "^11.0.0",
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "^4.0.1",
+          "@nestjs/core": "11.1.18",
+          "@nestjs/platform-express": "11.1.18",
+          "@nestjs/schedule": "^6.0.0",
+          "@nestjs/schematics": "^11.0.0",
+          "@nestjs/swagger": "^11.0.6",
+          "@nestjs/testing": "11.1.18",
+          "@nestjs/typeorm": "^11.0.0"
+        },
+        "path": "services/db-writer"
+      },
+      "job-service": {
+        "internal_deps": [
+          "@netapp-cloud-datamigrate/api-handler-lib",
+          "@netapp-cloud-datamigrate/auth-lib",
+          "@netapp-cloud-datamigrate/jobs-lib",
+          "@netapp-cloud-datamigrate/logger-lib"
+        ],
+        "nestjs_versions": {
+          "@nestjs/axios": "4.0.1",
+          "@nestjs/cli": "11.0.21",
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "4.0.4",
+          "@nestjs/core": "11.1.18",
+          "@nestjs/event-emitter": "3.1.0",
+          "@nestjs/microservices": "11.1.19",
+          "@nestjs/platform-express": "11.1.18",
+          "@nestjs/schedule": "6.1.3",
+          "@nestjs/schematics": "11.0.10",
+          "@nestjs/swagger": "11.4.2",
+          "@nestjs/testing": "11.1.18",
+          "@nestjs/typeorm": "11.0.1"
+        },
+        "path": "services/jobs-service"
+      },
+      "support-service": {
+        "internal_deps": [],
+        "nestjs_versions": {
+          "@nestjs/cli": "^11.0.0",
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "^4.0.2",
+          "@nestjs/core": "11.1.18",
+          "@nestjs/platform-express": "11.1.18",
+          "@nestjs/schematics": "^11.0.0",
+          "@nestjs/swagger": "^11.2.0",
+          "@nestjs/testing": "11.1.18",
+          "@nestjs/typeorm": "^11.0.0"
+        },
+        "path": "services/support-service"
+      },
+      "test": {
+        "internal_deps": [
+          "@netapp-cloud-datamigrate/api-handler-lib",
+          "@netapp-cloud-datamigrate/auth-lib",
+          "@netapp-cloud-datamigrate/jobs-lib",
+          "@netapp-cloud-datamigrate/logger-lib"
+        ],
+        "nestjs_versions": {
+          "@nestjs/cli": "11.0.21",
+          "@nestjs/common": "11.1.18",
+          "@nestjs/config": "4.0.4",
+          "@nestjs/core": "11.1.18",
+          "@nestjs/microservices": "11.1.19",
+          "@nestjs/platform-express": "11.1.18",
+          "@nestjs/schedule": "6.1.3",
+          "@nestjs/schematics": "11.0.10",
+          "@nestjs/swagger": "11.4.2",
+          "@nestjs/testing": "11.1.18",
+          "@nestjs/typeorm": "11.0.1"
+        },
+        "path": "services/reports-service"
+      },
+      "worker": {
+        "internal_deps": [
+          "@netapp-cloud-datamigrate/jobs-lib",
+          "@netapp-cloud-datamigrate/logger-lib"
+        ],
+        "nestjs_versions": {
+          "@nestjs/axios": "^4.0.0",
+          "@nestjs/cli": "^11.0.16",
+          "@nestjs/common": "^11.1.26",
+          "@nestjs/config": "^4.0.4",
+          "@nestjs/core": "^11.1.18",
+          "@nestjs/platform-express": "^11.1.26",
+          "@nestjs/schedule": "^6.1.3",
+          "@nestjs/schematics": "^11.1.0",
+          "@nestjs/testing": "^11.1.26"
+        },
+        "path": "services/worker"
+      }
+    }
+  }
+}
