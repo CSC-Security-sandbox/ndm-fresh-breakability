@@ -23,7 +23,7 @@
     "@netapp-cloud-datamigrate/logger-lib": "0.0.18"
   },
   "devDependencies": {
-    "@nestjs/common": "11.1.18",
+    "@nestjs/common": "11.1.27",
     "@nestjs/config": "4.0.4",
     "@nestjs/core": "11.1.18",
     "@nestjs/platform-express": "11.1.18",
