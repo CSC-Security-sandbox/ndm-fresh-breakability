@@ -1,492 +1,241 @@
-# Copilot Code Review Instructions — TypeScript
+# VSA Control Plane Development Guide
 
-These instructions guide GitHub Copilot when reviewing TypeScript code in this repository.
-Apply these rules consistently across **all pull requests**.
+## Architecture Overview
 
-> **Legend:**
-> - ❌ = Pattern to flag / reject
-> - ✅ = Preferred pattern to suggest
+This is a **VSA (Virtual Storage Appliance) Control Plane** - a microservices-based system managing the lifecycle of NetApp ONTAP storage systems on cloud hyperscalers (primarily Google Cloud). The architecture follows a **workflow-driven approach** using Temporal for orchestrating complex, long-running storage operations.
 
----
+### System Context
+The VSA Control Plane (VCP) is NetApp's **lightweight regional control plane** that integrates with Google Cloud NetApp Volumes (GCNV) to deliver unified storage support (block + file protocols) using VSA backend clusters. It coexists with the legacy SDE (Service Delivery Engine) but provides a cleaner architecture for VSA-based resources without the complexities of multi-tenant hardware cluster management.
 
-## Table of Contents
+### Key Components
+- **Core API** (`core/`): Hyperscaler-agnostic business logic and orchestration
+- **Google Proxy** (`google-proxy/`): GCP-specific operations and resource management  
+- **Telemetry** (`telemetry/`): Metrics collection and performance monitoring
+- **Worker** (`worker/`): Temporal workflow worker executing background tasks
+- **ONTAP Proxy** (`ontap-proxy/`): NetApp ONTAP API interactions
 
-- [Copilot Code Review Instructions — TypeScript](#copilot-code-review-instructions--typescript)
-  - [Table of Contents](#table-of-contents)
-  - [1. Type Safety](#1-type-safety)
-  - [2. Interfaces \& Types](#2-interfaces--types)
-  - [3. Null \& Undefined Handling](#3-null--undefined-handling)
-  - [4. Async / Await \& Promises](#4-async--await--promises)
-  - [5. Avoid Synchronous Methods](#5-avoid-synchronous-methods)
-    - [5.1 File System (`fs`)](#51-file-system-fs)
-    - [5.2 Child Process](#52-child-process)
-    - [5.3 DNS](#53-dns)
-    - [5.4 Acceptable Exceptions](#54-acceptable-exceptions)
-  - [6. Generics](#6-generics)
-  - [7. Enums](#7-enums)
-  - [8. Functions \& Methods](#8-functions--methods)
-  - [9. Classes](#9-classes)
-  - [10. Readonly \& Immutability](#10-readonly--immutability)
-  - [11. Error Handling](#11-error-handling)
-  - [12. Imports \& Modules](#12-imports--modules)
-  - [13. Utility Types](#13-utility-types)
-  - [14. Naming Conventions](#14-naming-conventions)
-  - [15. Comments \& Documentation](#15-comments--documentation)
-  - [16. Testing Considerations](#16-testing-considerations)
-  - [17. Performance](#17-performance)
-  - [18. Security](#18-security)
-  - [19. General Review Checklist](#19-general-review-checklist)
-    - [Type Safety](#type-safety)
-    - [Async \& I/O](#async--io)
-    - [Code Quality](#code-quality)
-    - [Documentation \& Tests](#documentation--tests)
-    - [Security](#security)
+### Data Flow & Integration
+VCP operates as a **regional entity** that receives requests from Google's CCFE/CLH through a forwarding proxy. It manages VSA clusters deployed in regional tenant projects using GCE VMs and Hyperdisk storage running NetApp ONTAP. The control plane handles both synchronous operations and long-running workflows (LROs) with polling mechanisms.
 
----
+## Critical Architectural Patterns
 
-## 1. Type Safety
+### Workflow-First Design
+All complex operations are implemented as **Temporal workflows** in `core/orchestrator/workflows/`. Each workflow is paired with activities in `core/orchestrator/activities/`.
 
-- **Never use `any`** — flag all occurrences. Suggest a specific type, `unknown`, or a generic.
-- **No implicit `any`** — all function parameters and return types must be explicitly typed.
-- **Prefer `unknown` over `any`** for truly unknown values; always narrow before use.
-- **Avoid type assertions (`as`)** unless unavoidable. Require an explanatory comment when used.
-- **Enforce strict null checks** — flag patterns that ignore `null` or `undefined`.
-
-```ts
-// ❌ Bad
-function process(data: any) { ... }
-
-// ✅ Good
-function process(data: ProcessInput): ProcessOutput { ... }
-```
-
----
-
-## 2. Interfaces & Types
-
-- Use `interface` for object shapes that may be extended; use `type` for unions, intersections, and aliases.
-- Avoid redundant or overlapping type declarations.
-- All exported types and interfaces must have JSDoc comments.
-- Flag `object`, `Object`, or `{}` as types — require specific, named definitions.
-
-```ts
-// ❌ Bad
-const handler = (req: object) => { ... }
-
-// ✅ Good
-const handler = (req: Request): Response => { ... }
-```
-
----
-
-## 3. Null & Undefined Handling
-
-- Flag unguarded access on values that may be `null` or `undefined`.
-- Suggest optional chaining (`?.`) and nullish coalescing (`??`) where appropriate.
-- Flag non-null assertions (`!`) unless provably safe — require a comment explaining why.
-
-```ts
-// ❌ Bad
-const name = user.profile.name;
-
-// ✅ Good
-const name = user?.profile?.name ?? 'Anonymous';
-```
-
----
-
-## 4. Async / Await & Promises
-
-- All `async` functions must declare an explicit return type (e.g., `Promise<User>`).
-- Prefer `async/await` over `.then()/.catch()` chains for consistency and readability.
-- All `await` expressions must be inside a `try/catch` or have upstream error handling.
-- Flag unhandled floating promises (no `await` and no `.catch()`).
-
-```ts
-// ❌ Bad
-fetchUser().then(u => setUser(u));
-
-// ✅ Good
-try {
-  const user = await fetchUser();
-  setUser(user);
-} catch (error: unknown) {
-  handleError(error);
+```go
+// Workflow pattern: workflows define the business logic flow
+func (wf *BackupCreateWorkflow) Run(ctx workflow.Context, args ...interface{}) (interface{}, *vsaerrors.CustomError) {
+    err := workflow.ExecuteActivity(ctx, backupActivity.PrepareObjectStoreActivity, context).Get(ctx, &context)
+    // Activities are the actual work units
 }
 ```
 
----
+### Cloud Abstraction Boundary
+**Critical Rule**: The `core/` module MUST NOT import cloud-specific packages. Cloud operations go through the hyperscaler abstraction layer.
 
-## 5. Avoid Synchronous Methods
+```go
+// ❌ Never in core/
+import "cloud.google.com/go/storage"
 
-> **Rule:** Never use synchronous (blocking) API variants when an async alternative exists.
-> Sync methods block the Node.js event loop and harm performance in server-side and I/O-heavy code.
-
-### 5.1 File System (`fs`)
-
-Always use `fs/promises` (or `fs.promises.*`) instead of `*Sync` methods.
-
-| ❌ Sync (forbidden)        | ✅ Async alternative         |
-|---------------------------|------------------------------|
-| `fs.readFileSync()`       | `fs.promises.readFile()`     |
-| `fs.writeFileSync()`      | `fs.promises.writeFile()`    |
-| `fs.mkdirSync()`          | `fs.promises.mkdir()`        |
-| `fs.mkdtempSync()`        | `fs.promises.mkdtemp()`      |
-| `fs.readdirSync()`        | `fs.promises.readdir()`      |
-| `fs.statSync()`           | `fs.promises.stat()`         |
-| `fs.renameSync()`         | `fs.promises.rename()`       |
-| `fs.unlinkSync()`         | `fs.promises.unlink()`       |
-| `fs.copyFileSync()`       | `fs.promises.copyFile()`     |
-| `fs.existsSync()`         | `fs.promises.access()`       |
-| `fs.appendFileSync()`     | `fs.promises.appendFile()`   |
-| `fs.chmodSync()`          | `fs.promises.chmod()`        |
-| `fs.lstatSync()`          | `fs.promises.lstat()`        |
-| `fs.realpathSync()`       | `fs.promises.realpath()`     |
-| `fs.truncateSync()`       | `fs.promises.truncate()`     |
-
-```ts
-// ❌ Bad — blocks the event loop
-import fs from 'fs';
-
-const data = fs.readFileSync('./config.json', 'utf-8');
-fs.writeFileSync('./output.json', data);
-fs.mkdirSync('./logs', { recursive: true });
-
-// ✅ Good — non-blocking
-import fs from 'fs/promises';
-
-const data = await fs.readFile('./config.json', 'utf-8');
-await fs.writeFile('./output.json', data);
-await fs.mkdir('./logs', { recursive: true });
+// ✅ Use abstraction
+import "github.com/vcp-vsa-control-Plane/vsa-control-plane/hyperscaler"
 ```
 
-### 5.2 Child Process
+### Database Architecture
+Uses **PostgreSQL** as the primary database with a hybrid data model:
+- **Relational data** for hierarchical resources (Account → Pool → Volume → Snapshot)
+- **JSONB columns** for semi-structured data (VolumeAttributes, PoolAttributes)
+- **Strong ACID properties** for data consistency in concurrent environments
+- **Temporal workflow persistence** for workflow state and history
 
-Flag `execSync`, `spawnSync`, and `execFileSync`. Use promisified alternatives instead.
+### Custom Error System
+Use the structured error system from `core/errors/` with categorized error codes:
+- 1000-1999: Workflow errors
+- 2000-2999: Database errors  
+- 3000-3999: GCP/Cloud errors
+- 4000-4999: VSA Cluster errors
+- 5000-5999: ONTAP errors
 
-```ts
-// ❌ Bad
-import { execSync } from 'child_process';
-const result = execSync('ls -la').toString();
-
-// ✅ Good
-import { exec } from 'child_process';
-import { promisify } from 'util';
-
-const execAsync = promisify(exec);
-const { stdout } = await execAsync('ls -la');
+```go
+return vsaerrors.NewVCPError(vsaerrors.ErrVolumeCreationFailed, err)
 ```
 
-### 5.3 DNS
+## Resource Management Patterns
 
-Flag synchronous DNS lookups. Use `dns.promises.*` instead.
+### VSA Cluster Lifecycle
+- **Storage Pool → VSA Cluster mapping**: Each GCNV Storage Pool is backed by a VSA cluster (2-node HA pair)
+- **Serial Number Generation**: 20-digit globally unique serial numbers with region-specific counters
+- **VMRS (Virtual Machine Right Sizing)**: Performance-based VM selection from configuration tables
 
-```ts
-// ❌ Bad
-import dns from 'dns';
-dns.lookupSync('example.com');
+### Networking Architecture
+VSA clusters use **multiple vNICs** for different purposes:
+- **vNIC0**: Management interface, cluster communication, GCS traffic (internal IPs: 198.18.0.0/x)
+- **vNIC1**: HA/Interconnect interface (internal IPs: 198.18.128.0/x)
+- **vNIC2**: Health checks, RSM for regional clusters (internal IPs: 198.18.192.0/x)
+- **vNIC3**: Data LIFs for customer protocols (customer-provided PSA IP range)
 
-// ✅ Good
-import dns from 'dns/promises';
-const address = await dns.lookup('example.com');
+### Storage Integration
+- **Backup**: GCS buckets per BackupVault with object store configuration and SnapMirror-to-cloud
+- **Auto-tiering**: Per-pool GCS buckets for cold data with workload identity authentication
+- **Replication**: Inter-cluster LIFs for SnapMirror traffic between regions
+
+## Architectural Decision Records (ADRs)
+
+### Database Technology Choice
+**PostgreSQL** was selected over other database options for specific architectural reasons:
+- **ACID Compliance**: Strong consistency guarantees essential for storage operations
+- **JSONB Support**: Hybrid data model supporting both relational and semi-structured data
+- **Hyperscaler Agnostic**: Available across all cloud providers without vendor lock-in
+- **Temporal Compatibility**: Native support for Temporal workflow persistence
+- **Operational Maturity**: Well-understood operational characteristics for distributed systems
+
+### VMRS (Virtual Machine Right Sizing)
+**Single HA-Pair Design**: Each GCNV Storage Pool maps to exactly one VSA cluster (2-node HA pair):
+- **Cost Optimization**: Eliminates over-provisioning of large multi-pool clusters
+- **Resource Efficiency**: VM size selection based on performance requirements from VMRS tables
+- **Simplified Management**: Reduces operational complexity compared to multi-tenant clusters
+- **Configuration**: VMRS tables in `/config/vmrs_gcp.yaml` define VM-to-performance mappings
+
+### Serial Number Generation Strategy
+**20-Digit Globally Unique Identifiers**:
+- **Format**: `{region_code}{4-digit-counter}{14-digit-timestamp}`
+- **Global Uniqueness**: Region-specific counters prevent collisions across deployments
+- **Traceability**: Embedded timestamp and region for operational tracking
+- **Implementation**: Counter management through database sequences with region isolation
+
+## Development Workflows
+
+## Documentation Standards
+
+### PlantUML Diagrams
+Architecture diagrams use **PlantUML** with specific conventions:
+- **C4 Model**: Context, Container, Component, and Code diagrams
+- **File Location**: All diagrams in `doc/architecture/` with `.puml` extensions
+- **Rendering**: Use PlantUML online service or local installation for viewing
+- **Standards**: Follow C4 model conventions for system boundaries and relationships
+
+```plantuml
+@startuml
+!include https://raw.githubusercontent.com/plantuml-stdlib/C4-PlantUML/master/C4_Context.puml
+
+Person(customer, "Storage Customer", "Requires persistent storage")
+System(gcnv, "Google Cloud NetApp Volumes", "Managed storage service")
+System(vcp, "VSA Control Plane", "Storage lifecycle management")
+
+Rel(customer, gcnv, "Provisions storage")
+Rel(gcnv, vcp, "Delegates VSA operations")
+@enduml
 ```
 
-### 5.4 Acceptable Exceptions
+### Local Development Setup
+```bash
+# Required environment variables
+export GHVSA_PAT=$(gh auth token)
+export DB_PASSWORD=<password>
+export VSA_NODE_PASSWORD=<ontap-password>
 
-The following are the **only** acceptable uses of sync methods.
-Always add a comment explaining the exception:
-
-| Scenario                        | Reason sync is acceptable                         |
-|---------------------------------|---------------------------------------------------|
-| Top-level CLI scripts           | Single-run process; event loop not a concern      |
-| Jest/Vitest `globalSetup` files | Test runner does not support async in setup files |
-| Build tooling (`scripts/*.ts`)  | Not part of the application runtime               |
-
-```ts
-// OK: CLI entry point — single-run process, blocking I/O is acceptable here
-const config = fs.readFileSync('./config.json', 'utf-8');
+# Build and run locally with Skaffold
+make build-all-binaries-dev skaffold-dev
 ```
 
----
+### Testing Patterns
+- **Workflow Tests**: Use `testsuite.WorkflowTestSuite` with extensive mocking of activities
+- **Mock Setup**: Always provide fully populated `BackupActivitiesContext` to avoid nil pointer issues
+- **Activity Tests**: Mock database (`database.NewMockStorage(t)`) and hyperscaler providers
 
-## 6. Generics
-
-- Encourage generics over duplicated typed functions.
-- Use descriptive generic parameter names (`TItem`, `TResponse`) in complex contexts.
-- Flag overly broad or unconstrained generics where a `extends` constraint would improve safety.
-
-```ts
-// ❌ Bad
-function getFirst(arr: string[]): string { ... }
-function getFirst(arr: number[]): number { ... }
-
-// ✅ Good
-function getFirst<T>(arr: T[]): T | undefined { ... }
+```go
+// Critical: Populate context completely in tests
+env.OnActivity("SomeActivity", mock.Anything, mock.Anything).Return(&activities.BackupActivitiesContext{
+    BackupWorkflowInit: &activities.BackupWorkflowInput{
+        Backup: backup, BackupVault: backupVault, Volume: volume,
+    },
+    Node: &models.Node{EndpointAddress: "127.0.0.1"},
+}, nil)
 ```
 
----
+### Code Generation Commands
+```bash
+make generate-mocks          # Generate all mocks using mockery
+make generate-core-api       # Generate OpenAPI server from core/core-api/api.yaml
+make generate-google-proxy   # Generate from google-proxy/api/gcp-api.yaml
+make test                    # Run tests with coverage
+```
 
-## 7. Enums
+## Data Model Patterns
 
-- Prefer `const enum` for compile-time inlining when runtime reflection is not needed.
-- Always use string enums over numeric enums for clarity and debuggability.
-- Flag mixing `enum` and union string types for the same concept.
+### GORM Patterns
+Models extend `BaseModel` with standard fields (ID, UUID, CreatedAt, UpdatedAt, DeletedAt):
 
-```ts
-// ❌ Bad
-enum Direction { Up, Down, Left, Right }
-
-// ✅ Good
-const enum Direction {
-  Up    = 'UP',
-  Down  = 'DOWN',
-  Left  = 'LEFT',
-  Right = 'RIGHT',
+```go
+type Volume struct {
+    BaseModel
+    VolumeAttributes *VolumeAttributes `gorm:"column:volume_attributes;type:jsonb"`
+    Pool             *Pool             `gorm:"ForeignKey:PoolID"`
 }
 ```
 
----
+### Activity Context Pattern
+Workflows pass context between activities using `BackupActivitiesContext` structures:
 
-## 8. Functions & Methods
-
-- All exported functions must have explicit parameter types and return types.
-- Flag functions longer than ~40 lines — suggest decomposition into smaller units.
-- Prefer pure functions; flag side effects that are not clearly documented.
-- Avoid overloaded function signatures unless they meaningfully improve clarity.
-
----
-
-## 9. Classes
-
-- Enforce access modifiers (`private`, `protected`, `public`) on **all** class members.
-- Flag mutable public class properties — prefer `readonly` or accessor methods.
-- Avoid `this` outside of class methods; ensure correct binding contexts.
-- Prefer composition over inheritance; flag inheritance chains deeper than 2 levels.
-
-```ts
-// ❌ Bad
-class User {
-  name: string;
-  age: number;
-}
-
-// ✅ Good
-class User {
-  constructor(
-    public  readonly name: string,
-    private          age: number,
-  ) {}
+```go
+type BackupActivitiesContext struct {
+    BackupWorkflowInit     *BackupWorkflowInput
+    Node                   *models.Node
+    SnapshotName          string
+    TransferStatus        SmStatus
+    // ... other fields accumulated during workflow
 }
 ```
 
----
+## Integration Points
 
-## 10. Readonly & Immutability
+### Temporal Integration
+- Workflows are registered in `workflow_engine/temporal/`
+- Use `workflow.ExecuteActivity()` for all external operations
+- Activities must be idempotent and retryable
+- Use `ConvertToVSAError()` to wrap errors for Temporal
 
-- Use `readonly` on class properties and interface fields that must not change after initialization.
-- Prefer `Readonly<T>`, `ReadonlyArray<T>`, or `as const` for immutable data structures.
-- Flag direct mutation of function arguments.
+### Database Layer
+- Use `database.Storage` interface for all DB operations
+- GORM with PostgreSQL backend
+- Migrations in `database/vcp/migrations/`
+- Always use context for cancellation and tracing
 
-```ts
-// ❌ Bad
-function updateUser(user: User) {
-  user.name = 'Updated'; // mutates caller's object
-}
+### ONTAP Integration
+- NetApp ONTAP operations through `core/vsa/` interfaces
+- Provider pattern in `hyperscaler/` for cloud-specific implementations
+- Mock providers available for testing
 
-// ✅ Good
-function updateUser(user: Readonly<User>): User {
-  return { ...user, name: 'Updated' };
-}
+## Project-Specific Conventions
+
+### Import Organization
+```go
+import (
+    // Standard library first
+    "context"
+    "fmt"
+    
+    // Third-party and local second (alphabetical)
+    "github.com/stretchr/testify/mock"
+    "github.com/vcp-vsa-control-Plane/vsa-control-plane/core/datamodel"
+)
 ```
 
----
+### Naming Conventions
+- Workflows: `CreateVolumeWorkflow`, `BackupCreateWorkflow`
+- Activities: `PrepareObjectStoreActivity`, `UpdateSnapshotActivity`  
+- Test mocks: `TestBackupActivity` with overridden methods
+- Error codes: `ErrVolumeCreationFailed`, `ErrDatabaseConnectionError`
 
-## 11. Error Handling
+### Key Files for Reference
+- `core/orchestrator/workflows/backup_workflow.go` - Complex workflow example
+- `core/orchestrator/activities/backup_activities.go` - Activity patterns
+- `core/datamodel/models.go` - Data model patterns
+- `CODING_GUIDELINES.md` - Comprehensive coding standards
+- `core/errors/README.md` - Error handling system documentation
 
-- `catch` blocks must never be empty — at minimum, log the error.
-- Never catch an `Error` and re-throw it as a plain string.
-- Use custom error classes that extend `Error` for domain-specific errors.
-- Flag `catch (e: any)` — use `catch (e: unknown)` and narrow the type before use.
-
-```ts
-// ❌ Bad
-try { ... } catch (e) {}
-
-// ✅ Good
-try {
-  ...
-} catch (e: unknown) {
-  if (e instanceof AppError) {
-    logger.error(e.message);
-  } else {
-    throw e;
-  }
-}
-```
-
----
-
-## 12. Imports & Modules
-
-- Prefer named exports over default exports for better refactoring tooling support.
-- Flag unused imports.
-- Use absolute imports via `paths` in `tsconfig.json` — flag deep relative paths (`../../..`).
-- Use `import type` for type-only imports to prevent accidental runtime inclusion.
-
-```ts
-// ❌ Bad
-import UserService from '../../services/UserService';
-import { User } from '../../models/User';
-
-// ✅ Good
-import { UserService } from '@services/UserService';
-import type { User } from '@models/User';
-```
-
----
-
-## 13. Utility Types
-
-Encourage use of built-in TypeScript utility types. Flag manual re-implementations.
-
-| Utility Type              | Use case                                     |
-|---------------------------|----------------------------------------------|
-| `Partial<T>`              | All properties optional                      |
-| `Required<T>`             | All properties required                      |
-| `Pick<T, K>`              | Select a subset of properties                |
-| `Omit<T, K>`              | Exclude specific properties                  |
-| `Record<K, V>`            | Key-value map with typed keys and values     |
-| `ReturnType<T>`           | Infer function return type                   |
-| `Parameters<T>`           | Infer function parameter types               |
-| `Awaited<T>`              | Unwrap resolved Promise type                 |
-| `Readonly<T>`             | Make all properties readonly                 |
-| `NonNullable<T>`          | Exclude null and undefined                   |
-
-```ts
-// ❌ Bad
-type UserUpdate = {
-  name?: string;
-  email?: string;
-};
-
-// ✅ Good
-type UserUpdate = Partial<Pick<User, 'name' | 'email'>>;
-```
-
----
-
-## 14. Naming Conventions
-
-| Construct          | Convention               | Example                     |
-|-------------------|--------------------------|-----------------------------|
-| Variables          | `camelCase`              | `userCount`                 |
-| Functions          | `camelCase`              | `getUserById`               |
-| Classes            | `PascalCase`             | `UserService`               |
-| Interfaces         | `PascalCase` (no `I` prefix) | `UserProfile`           |
-| Type aliases       | `PascalCase`             | `ApiResponse`               |
-| Enums              | `PascalCase`             | `OrderStatus`               |
-| Constants          | `SCREAMING_SNAKE_CASE`   | `MAX_RETRY_COUNT`           |
-| Generic parameters | `T`, `TKey`, `TValue`    | `function get<TItem>()`     |
-| Test files         | `*.test.ts` / `*.spec.ts`| `userService.test.ts`       |
-
----
-
-## 15. Comments & Documentation
-
-- All exported symbols (functions, classes, types, constants) must have JSDoc comments.
-- Inline comments should explain **why**, not **what** — the code should speak for itself.
-- Flag `TODO` and `FIXME` comments that do not reference a tracked issue number.
-
-```ts
-// ❌ Bad
-// TODO: fix this later
-
-// ✅ Good
-// TODO(#234): Retry logic missing — handle transient network failures
-```
-
----
-
-## 16. Testing Considerations
-
-- Flag new logic that has no corresponding test file or test case.
-- Test files must use `.test.ts` or `.spec.ts` naming suffix.
-- Use TypeScript-safe mocking (e.g., `jest.Mocked<T>`, `vi.mocked()`).
-- Flag `as any` casts inside test files — use properly typed mocks or fixtures.
-
-```ts
-// ❌ Bad
-const mockService = { getUser: jest.fn() } as any;
-
-// ✅ Good
-const mockService = { getUser: jest.fn() } as jest.Mocked<UserService>;
-```
-
----
-
-## 17. Performance
-
-- Flag synchronous operations inside loops that could be parallelized with `Promise.all`.
-- Flag unnecessary re-computation inside render functions or hot paths — suggest memoization.
-- Avoid using the `delete` operator on object properties — prefer `undefined` assignment or `Omit<T, K>`.
-
-```ts
-// ❌ Bad — sequential, slow
-for (const id of userIds) {
-  await fetchUser(id);
-}
-
-// ✅ Good — parallel
-await Promise.all(userIds.map(id => fetchUser(id)));
-```
-
----
-
-## 18. Security
-
-- Flag string interpolation in SQL queries or shell commands — require parameterized inputs.
-- Flag hardcoded secrets, API keys, tokens, or credentials of any kind.
-- Flag missing validation on user-supplied or external input before it is used.
-- Flag use of `eval()`, `Function()`, or `new Function()` — these are unsafe.
-
-```ts
-// ❌ Bad
-const query = `SELECT * FROM users WHERE id = ${userId}`;
-
-// ✅ Good
-const query = 'SELECT * FROM users WHERE id = ?';
-db.execute(query, [userId]);
-```
-
----
-
-## 19. General Review Checklist
-
-Before approving any pull request, verify all of the following:
-
-### Type Safety
-- [ ] No `any` types without a justified, commented reason
-- [ ] All exported functions have explicit parameter and return types
-- [ ] No unsafe non-null assertions (`!`) without explanation
-
-### Async & I/O
-- [ ] No `*Sync` file system, child process, or DNS methods in application code
-- [ ] All async code handles errors with `try/catch`
-- [ ] No unhandled floating promises
-
-### Code Quality
-- [ ] No functions longer than ~40 lines without decomposition
-- [ ] Naming conventions are followed throughout
-- [ ] No unused imports or variables
-- [ ] Deep relative imports replaced with absolute path aliases
-
-### Documentation & Tests
-- [ ] All exported symbols have JSDoc comments
-- [ ] No `TODO`/`FIXME` without a linked issue number
-- [ ] New logic has corresponding test coverage
-- [ ] No `as any` casts in test files
-
-### Security
-- [ ] No hardcoded secrets or credentials
-- [ ] User input is validated before use
-- [ ] No raw string interpolation in SQL or shell commands
+## Common Pitfalls
+- Never use empty `BackupActivitiesContext{}` in tests - always populate required fields
+- Temporal activity mocks need exact parameter counts (including context)
+- Cloud-specific code belongs in `hyperscaler/` or service-specific directories, not `core/`
+- Use `mock.Anything` parameters matching actual function signatures including context
