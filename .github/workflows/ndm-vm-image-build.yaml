@@ -690,7 +690,7 @@ jobs:
           uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
         - name: Download Binary Artifact
-          uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+          uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
           with:
             name: worker-binary
             path: .
@@ -794,7 +794,7 @@ jobs:
           egress-policy: audit
 
       - name: Download Windows Installer Artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: windows-worker-installer
           path: ./
@@ -924,19 +924,19 @@ jobs:
         uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
 
       - name: Download Helm chart artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: helm-chart
           path: ./artifacts/helm
 
       - name: Download Docker image tar artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: datamigrator-images
           path: ./artifacts/docker
 
       - name: Download Worker Binary artifact
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: worker-binary
           path: ./worker-bin
@@ -1203,21 +1203,21 @@ jobs:
       
       - name: Download Ansible vars.yaml
         if: ${{ matrix.component == 'control-plane' }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: ansible-vars
           path: app-deployment/ansible/control-plane/config/group_vars/
 
       - name: Download Helm chart artifact
         if: ${{ matrix.component == 'control-plane' }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: helm-chart
           path: app-deployment/artifacts/
 
       - name: Download Docker image tar artifact
         if: ${{ matrix.component == 'control-plane' }}
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: datamigrator-images
           path: app-deployment/artifacts/
@@ -1225,7 +1225,7 @@ jobs:
       - name: Download Worker Binary
         if: ${{ matrix.component == 'worker' }}
         id: worker-binary
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: worker-binary
           path: ${{ github.workspace }}/worker_bin/pkg/
@@ -1742,14 +1742,14 @@ jobs:
           egress-policy: audit
 
       - name: Download Image Info Artifacts
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: image-info-*
           merge-multiple: true
           path: ./image-info/
 
       - name: Download Image Version Artifacts (Azure)
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           pattern: image-version-*
           merge-multiple: true
@@ -1911,7 +1911,7 @@ jobs:
     steps:
       - name: Download Azure Control Plane Image Version artifact
         id: download-cp-version
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         continue-on-error: true
         with:
           name: image-version-control-plane-azure
@@ -1919,7 +1919,7 @@ jobs:
 
       - name: Download Azure Worker Image Version artifact
         id: download-worker-version
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         continue-on-error: true
         with:
           name: image-version-worker-azure

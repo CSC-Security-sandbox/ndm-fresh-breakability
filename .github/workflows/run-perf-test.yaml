@@ -688,7 +688,7 @@ jobs:
           echo "TF_VAR_dns_servers=${{ vars.AZURE_WIN_DNS_SERVERS }}" >> $GITHUB_ENV
 
       - name: Download Terraform State
-        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c
         with:
           name: terraform-state
           path: app-deployment/terraform/azure/environments/api
