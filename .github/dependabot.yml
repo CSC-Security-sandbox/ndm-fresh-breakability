@@ -1,25 +1,52 @@
 version: 2
 updates:
+  # Root level npm packages
   - package-ecosystem: "npm"
-    directory: "/"
+    directory: "/lib/auth-lib"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 50
-    labels:
-      - "dependencies"
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+  
+  - package-ecosystem: "npm"
+    directory: "/lib/api-handler-lib"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+  
+  - package-ecosystem: "npm"
+    directory: "/services/config-service"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+    
+  - package-ecosystem: "npm"
+    directory: "/services/admin-service"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
+  
+  # Go modules
+  - package-ecosystem: "gomod"
+    directory: "/ndm-api-tests"
+    schedule:
+      interval: "daily"
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
   
   - package-ecosystem: "gomod"
-    directory: "/"
+    directory: "/ndm-ui-tests"
     schedule:
       interval: "daily"
-    open-pull-requests-limit: 50
-    labels:
-      - "dependencies"
+    open-pull-requests-limit: 10
+    labels: ["dependencies"]
   
+  # GitHub Actions
   - package-ecosystem: "github-actions"
     directory: "/"
     schedule:
       interval: "weekly"
-    labels:
-      - "dependencies"
-      - "github_actions"
+    labels: ["dependencies", "github_actions"]
