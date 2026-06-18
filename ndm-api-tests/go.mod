@@ -9,7 +9,7 @@ require (
 	github.com/joho/godotenv v1.5.1
 	github.com/onsi/ginkgo/v2 v2.23.4
 	github.com/onsi/gomega v1.37.0
-	github.com/pkg/sftp v1.13.9
+	github.com/pkg/sftp v1.13.10
 	golang.org/x/crypto v0.45.0
 	gopkg.in/yaml.v2 v2.4.0
 )
