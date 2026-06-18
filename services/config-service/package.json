@@ -40,7 +40,7 @@
     "@temporalio/worker": "^1.11.6",
     "@temporalio/workflow": "^1.11.6",
     "@types/jsonwebtoken": "^9.0.6",
-    "amqp-connection-manager": "^4.1.14",
+    "amqp-connection-manager": "^5.0.0",
     "amqplib": "^0.10.4",
     "axios": "1.17.0",
     "class-transformer": "^0.5.1",
