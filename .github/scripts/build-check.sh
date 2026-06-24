@@ -2351,14 +2351,30 @@ except Exception as e:
     sed -n '/^{/,$p' "$CLI_OUTPUT_FILE" > "$CLI_JSON_FILE"
 
     if python3 -c "import json; json.load(open('$CLI_JSON_FILE'))" 2>/dev/null; then
-      DETERMINISTIC=$(python3 -c "
-import json, sys
+      DETERMINISTIC=$(BC_FILES_IMPORTING="$FILES_IMPORTING" python3 -c "
+import json, sys, os
 with open('$CLI_JSON_FILE') as f:
     data = json.load(f)
+# ── Reconcile usages with the authoritative module-scoped import scan ──
+# scan_usage_npm/go/pip runs from PKG_DIR, so files_importing is scoped to the
+# bumped module. The bundled CLI computes usages repo-wide, which over-reports
+# callsites in sibling modules that this PR does not affect. A symbol cannot be
+# used without importing the package, so when zero files import it in scope the
+# package is NOT REACHED and there can be no reachable callsites. Clearing the
+# repo-wide usages here keeps deterministic.usages consistent with
+# deterministic.files_importing so the recommendation says 'review the changelog'
+# rather than inventing callsites to verify.
+try:
+    _files_importing = json.loads(os.environ.get('BC_FILES_IMPORTING') or '[]')
+except (ValueError, TypeError):
+    _files_importing = []
+_usages = data.get('usages', []) or []
+if not _files_importing:
+    _usages = []
 result = {
   'api_changes': len(data.get('apiChanges', [])),
   'api_changes_detail': data.get('apiChanges', []),
-  'usages': data.get('usages', []),
+  'usages': _usages,
   'verification': {
     'tier': data.get('verification', {}).get('tier', 0),
     'verified': data.get('verification', {}).get('verified', False),
