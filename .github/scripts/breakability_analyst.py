@@ -1252,9 +1252,21 @@ def main():
     with open(args.build_results) as f:
         data = json.load(f)
     
-    results = data.get("results", [])
-    if not results:
-        print("No results found in build-results.json", file=sys.stderr)
+    # Try both schemas: "prs" dict (written by differential-probe, build-check) and "results" array (legacy)
+    prs_dict = data.get("prs", {})
+    results_array = data.get("results", [])
+    
+    if prs_dict:
+        # Convert prs dict to list, preserving pr_num
+        results = []
+        for pr_num_str, pr_data in prs_dict.items():
+            if isinstance(pr_data, dict):
+                pr_data.setdefault("pr_num", pr_num_str)
+                results.append(pr_data)
+    elif results_array:
+        results = results_array
+    else:
+        print("No results found in build-results.json (checked 'prs' dict and 'results' array)", file=sys.stderr)
         sys.exit(1)
     
     # Filter by PR if requested
