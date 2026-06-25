@@ -1037,11 +1037,20 @@ def _normalize_reachability(pr: Dict) -> Dict[str, Any]:
     
     Now uses deterministic data ONLY - no fallback to avoid schema mismatch.
     """
-    det = pr.get("deterministic", {})
+    det = pr.get("deterministic") or {}
     # Use deterministic data only - no OR fallback to avoid empty list [] being falsy
-    usages = det.get("usages") if det.get("usages") is not None else []
-    import_files = det.get("files_importing") if det.get("files_importing") is not None else []
-    reached = len(usages) > 0 or len(import_files) > 0
+    usages = det.get("usages")
+    if not isinstance(usages, list):
+        usages = []
+    import_files = det.get("files_importing")
+    if not isinstance(import_files, list):
+        import_files = []
+    # Reachability is driven SOLELY by usages (changed-symbol callsites). build-check
+    # clears usages when the bumped module is not imported in scope (NOT REACHED), and
+    # a package can be imported without using the changed API. import_files here is
+    # advisory only and must NOT force reached=True (that would mis-flag NOT REACHED
+    # packages like uuid, whose repo-wide usages reference unrelated symbols).
+    reached = len(usages) > 0
     return {"usages": usages, "import_files": import_files, "reached": reached}
 
 def _format_build_signal(build: Dict) -> str:
@@ -1167,22 +1176,17 @@ def _get_recommendation(pr: Dict) -> str:
         
         # DEBUG: Log ALL values - iteration 8.8 enhancement
         import sys
-        print(f"[DEBUG-8.8] PR#{pr_num} ({pkg}): verdict={verdict}, reached={reached}, usages_len={len(usages) if usages else 0}, files_len={len(files) if files else 0}", file=sys.stderr)
         
         if not reached:
             # Not reached - review changelog only, no callsite mention
-            print(f"[DEBUG-8.8] PR#{pr_num}: Taking NOT-REACHED branch", file=sys.stderr)
             return "Review the changelog for any notable changes, then merge."
         
         # Reached - check if we have file paths
-        print(f"[DEBUG-8.8] PR#{pr_num}: Taking REACHED branch, checking files", file=sys.stderr)
         if files and len(files) > 0:
             file_ref = files[0] if len(files) == 1 else f"{files[0]} and {len(files)-1} other file{'s' if len(files) > 2 else ''}"
-            print(f"[DEBUG-8.8] PR#{pr_num}: Has files, showing callsites", file=sys.stderr)
             return f"Review the changelog and verify callsites in `{file_ref}` are compatible, then merge."
         else:
             # Reached but no file data
-            print(f"[DEBUG-8.8] PR#{pr_num}: No files but reached=True (usages_len={len(usages) if usages else 0}), generic callsite text", file=sys.stderr)
             return "Review the changelog and verify affected callsites are compatible, then merge."
 
 def _get_build_confidence(build: Dict) -> str:
