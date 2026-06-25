@@ -12,59 +12,85 @@ import json
 import sys
 import os
 from typing import Dict, Any, List, Optional
+from verdict_contract import authoritative_verdict as _authoritative_verdict
 
 def _normalize_verdict(pr: Dict) -> Dict[str, str]:
-    """Extract verdict from verdict_v2 or deterministic layer.
-    
+    """Extract verdict using the authoritative verdict contract.
+
     Returns: {verdict: str, confidence: str, severity: str, priority: str}
     """
-    # Try verdict_v2 first (new format)
-    v2 = pr.get("verdict_v2", {})
-    if v2 and v2.get("verdict"):
-        return {
-            "verdict": v2.get("verdict", "REVIEW"),
-            "confidence": v2.get("confidence", "MEDIUM"),
-            "severity": v2.get("severity", "medium"),
-            "priority": v2.get("priority", "P2")
-        }
-    
-    # Fall back to deterministic layer
-    det = pr.get("deterministic", {})
-    verdict_data = det.get("verdict") or det.get("merge_risk") or det.get("classification")
-    
-    # Handle dict verdict (tag-based)
-    if isinstance(verdict_data, dict):
-        tag = verdict_data.get("tag", "Medium")
-        # Map tag to verdict
-        verdict_map = {
-            "Low": "SAFE",
-            "Medium": "REVIEW",
-            "High": "REVIEW",
-            "BuildFails": "BUILD_FAILS",
-            "Blocked": "BLOCKED"
-        }
-        verdict = verdict_map.get(tag, "REVIEW")
-        severity = tag.lower() if tag in ["Low", "Medium", "High"] else "medium"
-    elif isinstance(verdict_data, str):
-        # Map old verdicts to new
-        verdict_map = {
-            "safe": "SAFE",
-            "review": "REVIEW",
-            "build_fails": "BUILD_FAILS",
-            "blocked": "BLOCKED"
-        }
-        verdict = verdict_map.get(verdict_data.lower(), verdict_data.upper())
-        severity = "medium"
-    else:
-        verdict = "REVIEW"
-        severity = "medium"
-    
+    v = _authoritative_verdict(pr)
     return {
-        "verdict": verdict,
-        "confidence": det.get("confidence", "MEDIUM"),
-        "severity": severity,
-        "priority": det.get("priority", "P2")
+        "verdict": v.get("verdict", "REVIEW"),
+        "confidence": v.get("confidence", "MEDIUM"),
+        "severity": v.get("severity", "medium"),
+        "priority": v.get("priority", "P2"),
     }
+
+def _describe_signal_traits(pr: Dict[str, Any]) -> str:
+    """Build actual signal trait string from PR data (not hardcoded)."""
+    traits = []
+    bump = pr.get("bump", "unknown")
+    traits.append(bump.title())
+
+    reach = _normalize_reachability(pr)
+    if reach.get("reached"):
+        traits.append("Reachable")
+
+    probe = _normalize_probe(pr)
+    if probe["state"] == "DIFFERENT":
+        traits.append("Behavioral Changes")
+    elif probe["state"] == "SAME":
+        traits.append("Behavior Unchanged")
+
+    det = pr.get("deterministic", {})
+    changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
+    if changelog_norm["is_breaking"]:
+        traits.append("Breaking Changelog")
+
+    return ", ".join(traits)
+
+
+def _merge_risk_tag(pr: Dict[str, Any]) -> str:
+    """Generate Merge Risk tag from evidence and confidence."""
+    warning_count = 0
+    signals = []
+    probe = _normalize_probe(pr)
+    reach = _normalize_reachability(pr)
+    build = pr.get("build", {})
+    test = pr.get("test", {})
+    det = pr.get("deterministic", {})
+    changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
+
+    if build.get("verdict") == "fail":
+        warning_count += 1
+        signals.append("build fail")
+    if test.get("verdict") == "fail" or test.get("exit_code", 0) != 0:
+        warning_count += 1
+        signals.append("test fail")
+    if probe["state"] == "DIFFERENT":
+        warning_count += 1
+        signals.append("probe DIFFERENT")
+    if reach.get("reached"):
+        warning_count += 1
+        signals.append("reachable")
+    if changelog_norm["is_breaking"]:
+        warning_count += 1
+        signals.append("changelog breaking")
+
+    if warning_count >= 3:
+        risk = "High"
+        conf = "L4"
+    elif warning_count >= 1:
+        risk = "Medium"
+        conf = "L3"
+    else:
+        risk = "Low"
+        conf = "L2"
+
+    evidence = " + ".join(signals) if signals else "all signals clean"
+    return f"**Merge Risk:** {risk} (Evidence: {evidence} · Confidence: {conf})"
+
 
 def format_verdict_header(pr: Dict[str, Any]) -> str:
     """Format the verdict header with emoji, confidence, priority."""
@@ -73,14 +99,13 @@ def format_verdict_header(pr: Dict[str, Any]) -> str:
     confidence = verdict_norm["confidence"]
     severity = verdict_norm["severity"]
     priority = verdict_norm["priority"]
-    
+
     pkg = pr.get("package", "unknown")
     from_ver = pr.get("from", "?")
     to_ver = pr.get("to", "?")
     bump = pr.get("bump", "unknown")
     dep_type = pr.get("dep_type", "dependency")
-    
-    # Map verdict to emoji and label
+
     verdict_map = {
         "SAFE": ("✅", "SAFE", "None"),
         "REVIEW": ("🟠", "REVIEW REQUIRED", severity.title()),
@@ -88,21 +113,17 @@ def format_verdict_header(pr: Dict[str, Any]) -> str:
         "BLOCKED": ("🔴", "BLOCKED", "High")
     }
     emoji, label, breakability = verdict_map.get(verdict, ("⚠️", "REVIEW", "Medium"))
-    
-    # Generate headline based on verdict
-    headlines = {
-        "SAFE": "This upgrade is safe to merge.",
-        "REVIEW": "Review required for this upgrade.",
-        "BUILD_FAILS": "Build fails with this upgrade.",
-        "BLOCKED": "Critical issues block this upgrade."
-    }
-    headline = headlines.get(verdict, "Review required for this upgrade.")
-    
-    return f"""## {emoji} Breakability Analysis — {label} ({bump.title()}, Reachable, Behavioral Changes)
 
-**Package:** `{pkg}` {from_ver} → {to_ver}  
-**Bump Type:** {bump} · **Dep Type:** {dep_type} · **Priority:** {priority}  
+    headline = _generate_headline(pr, verdict)
+    traits = _describe_signal_traits(pr)
+    merge_risk = _merge_risk_tag(pr)
+
+    return f"""## {emoji} Breakability Analysis — {label} ({traits})
+
+**Package:** `{pkg}` {from_ver} → {to_ver}
+**Bump Type:** {bump} · **Dep Type:** {dep_type} · **Priority:** {priority}
 **Verdict:** {emoji} **{label}** · **Confidence:** {confidence.upper()}
+{merge_risk}
 
 **Headline:** {headline}
 
@@ -110,6 +131,44 @@ def format_verdict_header(pr: Dict[str, Any]) -> str:
 
 ---
 """
+
+
+def _generate_headline(pr: Dict[str, Any], verdict: str) -> str:
+    """Generate a specific headline from actual PR data."""
+    pkg = pr.get("package", "unknown")
+    bump = pr.get("bump", "unknown")
+    dep_type = pr.get("dep_type", "dependency")
+    probe = _normalize_probe(pr)
+    reach = _normalize_reachability(pr)
+    det = pr.get("deterministic", {})
+    changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
+
+    if verdict == "BLOCKED" or verdict == "BUILD_FAILS":
+        return f"Build fails with {pkg} upgrade. Fix build issues before merging."
+
+    if verdict == "SAFE":
+        if dep_type in ("dev", "devDependency", "devDependencies"):
+            return f"Dev dependency upgrade is safe to merge. No production impact."
+        if not reach.get("reached"):
+            return f"Safe to merge — {pkg} is not imported by any production code."
+        if probe["state"] == "SAME":
+            return f"Safe to merge — behavioral probe confirms no runtime changes."
+        return f"This upgrade is safe to merge."
+
+    if probe["state"] == "DIFFERENT":
+        files = reach.get("files", [])
+        if files:
+            return (f"{bump.title()} version upgrade with confirmed behavioral changes "
+                    f"detected by runtime probe. Package is imported by {len(files)} "
+                    f"production file(s). Review the breaking changes before merging.")
+        return (f"{bump.title()} version upgrade with behavioral changes detected. "
+                f"Review the breaking changes before merging.")
+
+    if changelog_norm["is_breaking"]:
+        return (f"{bump.title()} version upgrade with breaking changelog entries. "
+                f"Review changes before merging.")
+
+    return f"Review required for this {bump} upgrade of {pkg}."
 
 def format_signal_summary(pr: Dict[str, Any]) -> str:
     """Format the 7-layer signal summary table."""
@@ -138,7 +197,8 @@ def format_signal_summary(pr: Dict[str, Any]) -> str:
         table += f"| {layer} | {result} | {conf} | {evidence} |\n"
     
     signal_agreement = _count_warning_signals(signals)
-    table += f"\n**Signal Agreement:** {signal_agreement} signals warn → {pr.get('verdict_v2', {}).get('verdict', 'REVIEW')}\n\n---\n"
+    verdict_norm = _normalize_verdict(pr)
+    table += f"\n**Signal Agreement:** {signal_agreement} signals warn → {verdict_norm['verdict']}\n\n---\n"
     
     return table
 
@@ -171,9 +231,8 @@ def format_build_analysis(pr: Dict[str, Any]) -> str:
     for step in steps:
         section += f"- {step}\n"
     
-    # Add build output
     if build.get("output_tail"):
-        section += f"\n**Build Output:**\n```\n{build['output_tail'][:500]}\n```\n"
+        section += f"\n<details>\n<summary><b>Build Output</b></summary>\n\n```\n{build['output_tail'][:500]}\n```\n</details>\n"
     
     section += f"\n**Confidence:** **{_get_build_confidence(build)}** — {_get_build_confidence_reason(build)}\n\n---\n"
     
@@ -222,7 +281,15 @@ def format_test_analysis(pr: Dict[str, Any]) -> str:
         section += f"- Cannot verify runtime behavior via tests\n"
     
     confidence = "HIGH" if verdict == "pass" else "LOW"
-    section += f"\n**Confidence:** **{confidence}** — {'Test suite provides runtime verification' if verdict == 'pass' else 'No test evidence (mitigated by behavioral probe below)'}.\n\n---\n"
+    if verdict == "pass":
+        conf_text = "Test suite provides runtime verification"
+    else:
+        probe = _normalize_probe(pr)
+        if probe["state"] in ("SAME", "DIFFERENT"):
+            conf_text = "No test evidence (mitigated by behavioral probe below)"
+        else:
+            conf_text = "No test evidence and behavioral probe did not run"
+    section += f"\n**Confidence:** **{confidence}** — {conf_text}.\n\n---\n"
     
     return section
 
@@ -396,21 +463,11 @@ def format_reachability_analysis(pr: Dict[str, Any]) -> str:
     return section
 
 def format_ai_arbiter_section(pr: Dict[str, Any]) -> str:
-    """Format AI arbiter layer section."""
+    """Format AI arbiter layer section. Returns empty when not applicable."""
     ai = pr.get("ai_adjudication") or pr.get("ai_verdict", {})
-    
+
     if not ai:
-        verdict_v2 = pr.get("verdict_v2", {}).get("verdict", "REVIEW")
-        return f"""### 🤖 AI Arbiter Layer
-**Status:** ⬜ **NOT-APPLICABLE** (human review required)
-
-**Why NOT applied:**
-The AI arbiter engages for break-reachable cases where signals conflict and automated adjudication could reduce false positives. In this case, deterministic signals recommend **{verdict_v2}** and no conflict exists to resolve.
-
-**Policy:** When deterministic signals unanimously recommend a clear verdict, AI does not override (fail-safe principle).
-
----
-"""
+        return ""
     
     applied = ai.get("applied", "not_applied")
     reason = ai.get("reason", "No AI adjudication performed")
@@ -443,23 +500,8 @@ def format_policy_decision(pr: Dict[str, Any]) -> str:
     confidence = verdict_v2.get("confidence", "MEDIUM")
     canonical_reason = verdict_v2.get("reason", "Review required for this upgrade.")
     
-    section = f"""### 🧮 Policy Decision
-**How the verdict was reached:**
-
-The final verdict follows a **strict precedence hierarchy** (fail-safe design):
-
-```
-Precedence Order (highest to lowest):
-1. Build Failures → BLOCKED (nothing works = immediate block)
-2. Security/CVE → BLOCKED (safety-critical, never auto-merge)
-3. Behavioral Probe DIFFERENT → REVIEW (runtime changes = human verify)
-4. Reached + Breaking API/Changelog → REVIEW (impact confirmed)
-5. AI Arbiter Downgrade → SAFE (low-risk after analysis)
-6. Default (no warnings) → SAFE (appears safe to merge)
-```
-
-**This PR's Decision Path:**
-"""
+    section = f"""<details>
+<summary>🧮 <b>Policy Decision</b> — Applied rule: """
     
     # Reconstruct decision path with precedence labels
     steps = []
@@ -519,144 +561,41 @@ Precedence Order (highest to lowest):
         applied_rule = "No warning signals detected (default safe)"
         applied_line = "Line 6"
     
+    section += f"""{applied_rule}</summary>
+
+"""
     for step in steps:
         section += f"{step}\n"
-    
-    # Risk assessment
+
     risk_level = _assess_overall_risk(pr)
-    zero_false_green = _check_zero_false_green(pr)
-    
+
     section += f"""
 **Applied rule:** {applied_line} ({applied_rule})
-
 **Final Verdict:** **{verdict}** (Confidence: {confidence})
+**Risk Assessment:** {risk_level}
 
-**Why {verdict}?** {canonical_reason}
-
-**Risk Assessment:**
-- Breaking change risk: **{risk_level}**
-- Zero-false-green guarantee: {'✅ Multiple warning signals, fail-safe to REVIEW' if zero_false_green else '⚠️ Limited evidence, conservative REVIEW'}
-
-**Confidence Calculation:**
-- Build confidence: {_assess_build_confidence(pr)}
-- Probe confidence: {_assess_probe_confidence(pr)}
-- Signal agreement: {_calculate_signal_agreement(pr)}
-
-**Precedence Applied:** The highest-precedence rule that matched determined the verdict. Lower-precedence rules were not consulted (fail-safe cascade).
+</details>
 
 ---
 """
-    
+
     return section
 
 def format_final_recommendation(pr: Dict[str, Any]) -> str:
-    """Format final recommendation section with specific callsite verification."""
+    """Format concise final recommendation."""
     verdict_norm = _normalize_verdict(pr)
     verdict = verdict_norm["verdict"]
-    
-    reach_norm = _normalize_reachability(pr)
-    usages = reach_norm["usages"]
-    
-    probe_norm = _normalize_probe(pr)
-    det = pr.get("deterministic", {}) or {}
-    changelog_norm = _normalize_changelog(det.get("changelogSignal") or {})
-    
-    recommendations = {
-        "SAFE": "✅ **MERGE** — No breaking changes detected. Safe to auto-merge.",
+    recommendation = _get_recommendation(pr)
+
+    actions = {
+        "SAFE": "✅ **MERGE**",
         "REVIEW": "⚠️ **REVIEW THEN MERGE**",
-        "BUILD_FAILS": "❌ **DO NOT MERGE** — Build fails. Fix build issues before merging.",
-        "BLOCKED": "🔴 **BLOCKED** — Critical issues detected. Manual investigation required."
+        "BUILD_FAILS": "❌ **DO NOT MERGE**",
+        "BLOCKED": "🔴 **BLOCKED**"
     }
-    
-    action = recommendations.get(verdict, "⚠️ **REVIEW** — Manual review recommended.")
-    
-    section = f"""### 🎯 Final Recommendation
-{action}
 
-"""
-    
-    if verdict == "SAFE":
-        section += """**Next Steps:**
-1. Auto-merge via Dependabot
-2. Monitor post-merge CI/CD for any issues
-
-"""
-    elif verdict == "REVIEW":
-        # Add specific callsite verification if reached
-        if usages and len(usages) > 0:
-            first_usage = usages[0]
-            file_path = first_usage.get("file", "unknown")
-            line_num = first_usage.get("line", "?")
-            symbol = first_usage.get("symbol", "unknown")
-            usage_type = first_usage.get("usageType", "UNKNOWN")
-            
-            section += f"""**What to review:**
-
-1. **Verify callsite compatibility:**
-   - **File:** `{file_path}:{line_num}`
-   - **Symbol:** `{symbol}` ({usage_type})
-   - **Question:** Is this usage pattern still compatible with the new version?
-   - **Expected:** {'YES (basic usage)' if usage_type == 'DIRECT_CALL' else 'Verify usage pattern'}
-
-"""
-            
-            # Add probe-specific questions if probe ran
-            if probe_norm["state"] == "DIFFERENT":
-                section += f"""2. **Check runtime behavior:**
-   - **Probe result:** SHA256 mismatch detected
-   - **Question:** Does the behavioral change affect `{symbol}` usage?
-   - **Expected:** Review probe output and compare export shapes
-
-"""
-            
-            # Add changelog-specific questions if breaking
-            if changelog_norm["is_breaking"]:
-                section += f"""3. **Review breaking changes:**
-   - **Changelog:** Breaking changes declared
-   - **Question:** Are the breaking changes relevant to our usage?
-   - **Expected:** Check changelog bullets for `{symbol}` or related APIs
-
-"""
-            
-            # Usage count context
-            total_usages = len(usages)
-            if total_usages > 1:
-                section += f"""4. **Check all {total_usages} callsites:**
-   - **Impact:** Multiple files import this package
-   - **Action:** Review all callsites listed in Reachability section above
-
-"""
-            
-            section += f"""**Why this needs review:**
-- {'⚠️ Probe confirms behavioral change (not false alarm)' if probe_norm['state'] == 'DIFFERENT' else ''}
-- {'⚠️ Changelog declares breaking changes' if changelog_norm['is_breaking'] else ''}
-- {'✅ Single callsite (low blast radius)' if total_usages == 1 else f'⚠️ {total_usages} callsites (verify each)'}
-
-**Estimated review time:** {'5-10 minutes (single callsite)' if total_usages == 1 else f'{5 + total_usages * 3}-{10 + total_usages * 5} minutes ({total_usages} callsites)'}
-
-"""
-        else:
-            # Unreached - simpler review
-            section += """**What to review:**
-1. Review the changelog for any breaking changes
-2. Package is not directly imported (transitive dependency)
-3. Consider updating if security fixes are included
-
-**Estimated review time:** 2-5 minutes (unreached, low risk)
-
-"""
-    
-    elif verdict in ["BUILD_FAILS", "BLOCKED"]:
-        section += """**Next Steps:**
-1. Fix build issues first
-2. Re-run analysis after fixes
-3. Do not merge until build is green
-
-"""
-    
-    section += "---\n"
-    
-    return section
+    action = actions.get(verdict, "⚠️ **REVIEW**")
+    return f"### 🎯 Final Recommendation\n{action} — {recommendation}\n\n---\n"
 
 def format_probe_section(pr: Dict[str, Any]) -> str:
     """Format behavioral probe section with SHA256 and reproduction."""
@@ -742,120 +681,30 @@ node -e "const u=require('{pkg}'); const c=require('crypto'); console.log(c.crea
     return section
 
 def format_independent_verification(pr: Dict[str, Any]) -> str:
-    """Format independent verification resources section with 6 complete workflows."""
+    """Format independent verification as collapsible section."""
     pkg = pr.get("package")
     from_ver = pr.get("from")
     to_ver = pr.get("to")
     det = pr.get("deterministic", {}) or {}
     usages = det.get("usages", [])
-    
-    section = f"""### 📚 Independent Verification Resources
 
-**For developers who want to verify this analysis:**
+    section = f"""<details>
+<summary>📚 <b>How to verify this analysis</b></summary>
 
-**1. Changelog Source:**
-   - Latest Release: https://github.com/{pkg.split('/')[-1]}/releases/tag/v{to_ver}
-   - Older Release: https://github.com/{pkg.split('/')[-1]}/releases/tag/v{from_ver}
-   - Full CHANGELOG: https://github.com/{pkg.split('/')[-1]}/blob/main/CHANGELOG.md
-   - NPM Page: https://www.npmjs.com/package/{pkg}/v/{to_ver}
-
-**2. API Diff Tool:**
-   ```bash
-   # Run locally:
-   npx npm-diff-ts {pkg}@{from_ver} {pkg}@{to_ver}
-   
-   # Or compare exports manually:
-   npm view {pkg}@{from_ver} exports
-   npm view {pkg}@{to_ver} exports
-   
-   # Check for type-only changes:
-   npm view {pkg}@{from_ver} | grep types
-   npm view {pkg}@{to_ver} | grep types
-   ```
-
-**3. Behavioral Probe (reproduce):**
-   ```bash
-   cd /tmp && npm init -y
-   
-   # Install old version, inspect runtime:
-   npm install {pkg}@{from_ver}
-   node -e "const u=require('{pkg}'); console.log(Object.keys(u).sort())"
-   
-   # Install new version, compare:
-   npm install {pkg}@{to_ver}
-   node -e "const u=require('{pkg}'); console.log(Object.keys(u).sort())"
-   
-   # Generate SHA256 of export shapes:
-   node -e "const u=require('{pkg}'); const c=require('crypto'); console.log(c.createHash('sha256').update(JSON.stringify(Object.keys(u).sort())).digest('hex').slice(0,16))"
-   ```
-
-**4. Reachability Check:**
-   ```bash
-   # Search all imports in your codebase:
-   git grep -n "from '{pkg}'" src/
-   git grep -n "require('{pkg}')" src/
-   
-   # Find specific symbol usage:
-   git grep -n "{pkg.split('/')[-1]}" src/
-   ```
+- **Changelog:** [v{to_ver} release](https://github.com/{pkg.split('/')[-1]}/releases/tag/v{to_ver}) · [npm](https://www.npmjs.com/package/{pkg}/v/{to_ver})
+- **API diff:** `npx npm-diff-ts {pkg}@{from_ver} {pkg}@{to_ver}`
+- **Behavioral probe:** `npm install {pkg}@{to_ver} && node -e "console.log(Object.keys(require('{pkg}')).sort())"`
+- **Reachability:** `git grep -n "from '{pkg}'" src/`
 """
     
     if usages and len(usages) > 0:
         first_file = usages[0].get("file", "unknown")
         first_line = usages[0].get("line", 0)
-        first_symbol = usages[0].get("symbol", "unknown")
-        
-        section += f"""
-**5. Callsite Inspection:**
-   ```bash
-   # View the actual usage context:
-   cat {first_file} | sed -n '{max(1, first_line-5)},{first_line+5}p' | cat -n
-   
-   # Or open in editor:
-   code {first_file}:{first_line}
-   
-   # Check if symbol '{first_symbol}' usage is affected by upgrade
-   ```
-   
-   **Verification questions:**
-   - Does `{first_symbol}` exist in new version? (Check API diff)
-   - Has signature changed? (Check TypeScript types)
-   - Is usage pattern compatible? (Check changelog for migration notes)
-"""
-    else:
-        section += """
-**5. Callsite Inspection:**
-   ```bash
-   # No direct callsites found (unreached dependency)
-   # Check transitive usage:
-   npm ls {pkg}
-   ```
-"""
-    
-    section += f"""
-**6. Analysis Run Logs:**
-   - This analysis run: Check GitHub Actions workflow artifacts
-   - Build results JSON: Download from Actions → Artifacts → build-results
-   - Probe output: Check deterministic stage logs in Actions
-   - Full pipeline: Review all 7 evidence layers in build-results.json
+        section += f"- **Callsite:** `{first_file}:{first_line}`\n"
+        if len(usages) > 1:
+            section += f"- **Total callsites:** {len(usages)}\n"
 
-**Callgraph Tool (when available):**
-```bash
-# Future: exact call-chain from production entry to dependency
-python3 .github/scripts/callsite_impact.py \\
-  --pr-data build-results.json \\
-  --package {pkg}
-# Will show: entry.ts → service.ts → {pkg}.method()
-```
-
-**External Resources:**
-- Package Security: https://snyk.io/advisor/npm-package/{pkg}
-- Bundle Size Impact: https://bundlephobia.com/package/{pkg}@{to_ver}
-- Type Definitions: https://www.npmjs.com/package/@types/{pkg.split('/')[-1]}
-- Migration Guide: Search https://github.com/{pkg.split('/')[-1]}/blob/main/UPGRADING.md
-
----
-"""
+    section += "\n</details>\n\n---\n"
     return section
 
 # ============================================================================
@@ -903,13 +752,22 @@ def _normalize_changelog(det: Dict) -> Dict[str, Any]:
     elif not isinstance(bullets, list):
         bullets = []
     
-    # Check bullets for BREAKING patterns (case-insensitive)
     has_breaking_in_bullets = any(
-        "BREAKING" in str(bullet).upper() or "BREAK" in str(bullet).upper() 
+        "BREAKING" in str(bullet).upper() or "BREAK" in str(bullet).upper()
         for bullet in bullets
     )
-    
-    # Determine if breaking: status OR bullets content
+
+    # Detect false-positive BREAKING: if status is "breaking" but ALL bullets say
+    # "no API change" / "no breaking change" / "bug fix and maintenance", downgrade.
+    _negation_patterns = ["no api change", "no breaking change", "bug fix and maintenance"]
+    all_bullets_negated = (
+        status == "breaking" and bullets and
+        all(any(neg in str(b).lower() for neg in _negation_patterns) for b in bullets)
+    )
+    if all_bullets_negated:
+        status = "clean"
+        has_breaking_in_bullets = False
+
     is_breaking = status == "breaking" or has_breaking_in_bullets
     
     # Available if status != missing OR bullets exist
@@ -1158,36 +1016,52 @@ def _count_warning_signals(signals: List) -> str:
 def _get_recommendation(pr: Dict) -> str:
     verdict_norm = _normalize_verdict(pr)
     verdict = verdict_norm["verdict"]
-    
-    # Iteration 8.6/8.8: Debug logging to diagnose PR #67 issue
-    pr_num = pr.get("number", "unknown")
     pkg = pr.get("package", "unknown")
-    
-    if verdict == "SAFE":
-        return "Safe to merge. Build passes and no breaking changes detected."
-    elif verdict == "BUILD_FAILS":
+    dep_type = pr.get("dep_type", "dependency")
+    probe = _normalize_probe(pr)
+    reach_norm = _normalize_reachability(pr)
+    reached = reach_norm["reached"]
+    files = reach_norm["import_files"]
+    det = pr.get("deterministic", {})
+    changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
+
+    if verdict in ("BUILD_FAILS", "BLOCKED"):
+        build = pr.get("build", {})
+        if build.get("verdict") == "pre_existing":
+            return "Build has pre-existing failures (not caused by this upgrade). Review build infra separately."
         return "Fix build errors before merging."
-    else:
-        # REVIEW verdict
-        reach_norm = _normalize_reachability(pr)
-        reached = reach_norm["reached"]
-        files = reach_norm["import_files"]
-        usages = reach_norm["usages"]
-        
-        # DEBUG: Log ALL values - iteration 8.8 enhancement
-        import sys
-        
+
+    if verdict == "SAFE":
+        if dep_type in ("dev", "devDependency", "devDependencies"):
+            return f"Safe to merge — dev dependency with no production impact."
         if not reached:
-            # Not reached - review changelog only, no callsite mention
-            return "Review the changelog for any notable changes, then merge."
-        
-        # Reached - check if we have file paths
-        if files and len(files) > 0:
-            file_ref = files[0] if len(files) == 1 else f"{files[0]} and {len(files)-1} other file{'s' if len(files) > 2 else ''}"
-            return f"Review the changelog and verify callsites in `{file_ref}` are compatible, then merge."
+            return f"Safe to merge — not imported by production code."
+        if probe["state"] == "SAME":
+            return f"Safe to merge — behavioral probe confirms identical runtime behavior."
+        return "Safe to merge. Build passes and no breaking changes detected."
+
+    parts = []
+    if changelog_norm["is_breaking"]:
+        bullets = changelog_norm["bullets"]
+        if bullets:
+            parts.append(f"Review changelog breaking changes ({bullets[0][:80]})")
         else:
-            # Reached but no file data
-            return "Review the changelog and verify affected callsites are compatible, then merge."
+            parts.append("Review the changelog for breaking changes")
+
+    if probe["state"] == "DIFFERENT":
+        parts.append("verify behavioral changes are compatible with your usage")
+
+    if reached and files:
+        file_ref = (f"`{files[0]}`" if len(files) == 1
+                    else f"`{files[0]}` and {len(files)-1} other file(s)")
+        parts.append(f"check callsites in {file_ref}")
+    elif reached:
+        parts.append("verify affected callsites are compatible")
+
+    if not parts:
+        parts.append(f"Review the changelog for {pkg}")
+
+    return ". ".join(parts).rstrip(".") + ", then merge."
 
 def _get_build_confidence(build: Dict) -> str:
     verdict = build.get("verdict", "unknown")

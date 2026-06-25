@@ -2368,7 +2368,14 @@ try:
     _files_importing = json.loads(os.environ.get('BC_FILES_IMPORTING') or '[]')
 except (ValueError, TypeError):
     _files_importing = []
-_usages = data.get('usages', []) or []
+_usages = data.get('usages') or []
+if not isinstance(_usages, list):
+    _usages = []
+# NOT REACHED gate: when the scoped import scan finds zero importing files in the
+# bumped module, the package is not reachable and there can be no reachable callsite.
+# Force usages=[] so deterministic.usages stays consistent with the (empty) module-
+# scoped import scan and the renderer says 'review the changelog' instead of inventing
+# callsites to verify. Both files_importing and usages are then empty for NOT REACHED.
 if not _files_importing:
     _usages = []
 result = {
