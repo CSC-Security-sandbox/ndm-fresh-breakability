@@ -96,7 +96,7 @@ def in_range(tag):
         return False
     return lo < tv <= hi
 pat = re.compile(r"\b(BREAKING|breaking[\s-]?change|backward[\s-]?incompatible|migration[\s-]?required|removed?|incompatible|default(?:s| value)?\s+(?:change|changed|now)|deprecated|renamed|deleted|no longer|behavior change|API change)\b", re.I)
-neg = re.compile(r"\b(no|not|without|non[-\s]?breaking|does not|did not)\b.{0,60}\b(api change|breaking|incompatible|removed|behavior change)s?\b|\b(api change|breaking change)s?\b.{0,60}\b(no|not|without|none)\b", re.I)
+neg = re.compile(r"\b(no|not|without|non[-\s]?breaking|does not|did not)\b.{0,80}\b(api change|breaking|incompatible|removed|behavior change)s?\b|\b(api change|breaking change)s?\b.{0,80}\b(no|not|without|none)\b", re.I)
 lines = []
 for rel in releases:
     tag = rel.get("tag_name") or rel.get("name") or ""
@@ -792,10 +792,6 @@ try:
 except:
     files = []
 
-if not files:
-    print('FALLBACK')
-    sys.exit(0)
-
 # Find all go.mod files to identify module boundaries
 mod_roots = []
 for root, dirs, fnames in os.walk('.'):
@@ -806,7 +802,13 @@ for root, dirs, fnames in os.walk('.'):
 # Sort by depth (deepest first) for longest-prefix matching
 mod_roots.sort(key=lambda x: -x.count('/'))
 if not mod_roots:
-    mod_roots = ['.']
+    print('FALLBACK')
+    sys.exit(0)
+
+if not files:
+    for mod in sorted(mod_roots):
+        print(f'{mod}|./...')
+    sys.exit(0)
 
 # Group import files by their owning module
 module_dirs = {}  # mod_root -> set of relative dirs
@@ -870,10 +872,6 @@ try:
 except:
     files = []
 
-if not files:
-    print('FALLBACK')
-    sys.exit(0)
-
 mod_roots = []
 for root, dirs, fnames in os.walk('.'):
     dirs[:] = [d for d in dirs if d not in ('vendor', '.git', 'node_modules')]
@@ -881,7 +879,13 @@ for root, dirs, fnames in os.walk('.'):
         mod_roots.append(os.path.normpath(root))
 mod_roots.sort(key=lambda x: -x.count('/'))
 if not mod_roots:
-    mod_roots = ['.']
+    print('FALLBACK')
+    sys.exit(0)
+
+if not files:
+    for mod in sorted(mod_roots):
+        print(f'{mod}|./...')
+    sys.exit(0)
 
 module_dirs = {}
 for f in files:
@@ -1019,10 +1023,6 @@ try:
 except:
     files = []
 
-if not files:
-    print('FALLBACK')
-    sys.exit(0)
-
 # Walk from workdir to find go.mod files
 workdir = os.environ.get('_BC_WORKDIR', '.')
 mod_roots = []
@@ -1034,7 +1034,13 @@ for root, dirs, fnames in os.walk(workdir):
 mod_roots = [os.path.normpath(m) for m in mod_roots]
 mod_roots.sort(key=lambda x: -x.count('/'))
 if not mod_roots:
-    mod_roots = ['.']
+    print('FALLBACK')
+    sys.exit(0)
+
+if not files:
+    for mod in sorted(mod_roots):
+        print(f'{mod}|./...')
+    sys.exit(0)
 
 module_dirs = {}
 for f in files:
@@ -1622,8 +1628,8 @@ if [[ -f "$MAIN_DIR/go.work" ]]; then
     echo "  go baseline cache-clean retry: exit=$main_go_exit"
   fi
   echo "  go baseline (workspace): exit=$main_go_exit"
-elif [[ -f "$MAIN_DIR/go.mod" ]]; then
-  # Check for multi-module layout (multiple go.mod without go.work)
+elif [[ -n "$(find "$MAIN_DIR" -name go.mod -not -path '*/vendor/*' -not -path '*/.git/*' -print -quit 2>/dev/null)" ]]; then
+  # Check for multi-module layout (one or more go.mod without go.work, including repos with no root go.mod)
   _GO_MODULES=$(find "$MAIN_DIR" -name go.mod -not -path '*/vendor/*' -not -path '*/.git/*' 2>/dev/null | sort)
   _MOD_COUNT=$(echo "$_GO_MODULES" | grep -c . || echo 0)
 
