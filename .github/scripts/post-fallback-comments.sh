@@ -762,11 +762,12 @@ text = det.get('changelogText') or ''
 if not status and not text:
     raise SystemExit(0)
 clean, seen = [], set()
+neg = re.compile(r"\b(no|not|without|non[-\s]?breaking|does not|did not)\b.{0,60}\b(api change|breaking|incompatible|removed|behavior change)s?\b|\b(api change|breaking change)s?\b.{0,60}\b(no|not|without|none)\b", re.I)
 for b in (sig.get('bullets') or []):
     if not isinstance(b, str):
         continue
     s = re.sub(r'\s+', ' ', b.replace('\r', ' ').replace('\n', ' ')).strip(' -*\t')
-    if not s or s.startswith('#'):  # drop pure markdown headers
+    if not s or s.startswith('#') or neg.search(s):  # drop pure markdown headers and negated no-change bullets
         continue
     s = _clip(s, 220)
     k = s.lower()
@@ -900,7 +901,7 @@ print(json.dumps({
     'test_output_tail': test.get('output_tail', ''),
     'main_test_exit': test.get('main_test_exit', -1),
     'verification_label': pr.get('verification_label', ''),
-    'files_importing': pr.get('files_importing', []),
+    'files_importing': pr.get('files_importing') or pr.get('import_files') or pr.get('importFiles') or [],
     'cves':         pr.get('cves', []),
     'error_class':  build.get('error_class', ''),
     'pkg_dir':      pr.get('pkg_dir', '/'),
@@ -927,6 +928,7 @@ print(json.dumps({
     'cve_details': pr.get('cve_details', []),
     'verification_steps': pr.get('verification_steps', []),
     'fixes_cves': pr.get('fixes_cves', []),
+    'ai_adjudication': pr.get('ai_adjudication', {}),
 }))
 " 2>/dev/null || echo '{}')
 
@@ -1543,7 +1545,7 @@ PYEOF
         _VULN_NOTE="
 - ⚠️ **CVE reachability NOT computed for this PR.** govulncheck (call-graph reachability on _our_ source) is disabled by config; the CVE list comes from **Dependabot**, which matches advisory version-ranges only — it does NOT prove the vulnerable symbol is reachable from our code, nor detect NEW CVEs the target version may regress in.
   - To get a per-CVE call-chain proof, re-run with \`BREAKABILITY_GOVULNCHECK=1\`.
-  - <!-- TODO(AI-LAYER): rank which of these CVEs are actually reachable from our call-graph and whether merging this PR delivers the fix; this is decision-support govulncheck/Dependabot alone cannot synthesize. --> Until then, treat the CVE list as advisory (version-match), not reachability-confirmed."
+  - Until then, treat the CVE list as advisory (version-match), not reachability-confirmed."
       else
         _VULN_NOTE="
 - ℹ️ govulncheck: disabled by config — CVE list sourced from Dependabot alerts (govulncheck is hint-only; not a merge gate)"
@@ -1760,7 +1762,7 @@ ${_DEP_RESOLUTION_LINE}
 
 ${_DEP_RESOLUTION_LINE}
 - ✅ Build passes${_EV_BUILD} — exit 0, $NEW_ERR_COUNT new error(s)
-- ⬜ Tests not configured or not run
+- ⬜ Tests not configured or not run (no behavioral-probe mitigation assumed)
 - ✅ Diffed error output: PR introduces 0 new diagnostics${_TRANSITIVE_NOTE}${_VULN_NOTE}
 </details>${_USAGE_CONTEXT_BLOCK}${_DECLARED_BREAK_REACH_BLOCK}${_FILES_DETAIL_BLOCK}${_GO_RESOLUTION_BLOCK}${_BUILD_STDOUT_BLOCK}${_NO_TEST_CONFIDENCE_BLOCK}${CHANGELOG_LINK}"
       ;;
@@ -1811,7 +1813,7 @@ ${_DEP_RESOLUTION_LINE}
 
 ${_DEP_RESOLUTION_LINE}
 - ✅ Build passes${_EV_BUILD} — exit 0, $NEW_ERR_COUNT new error(s)
-- ⬜ Tests not configured or not run
+- ⬜ Tests not configured or not run (no behavioral-probe mitigation assumed)
 - ✅ Diffed error output: PR introduces 0 new diagnostics${_TRANSITIVE_NOTE}${_VULN_NOTE}
 </details>${_USAGE_CONTEXT_BLOCK}${_DECLARED_BREAK_REACH_BLOCK}${_FILES_DETAIL_BLOCK}${_GO_RESOLUTION_BLOCK}${_BUILD_STDOUT_BLOCK}${_NO_TEST_CONFIDENCE_BLOCK}${CHANGELOG_LINK}"
         fi
@@ -2540,6 +2542,169 @@ if risk and "Merge Risk:" not in body:
             break
 print(body)
 ' 2>/dev/null || printf '%s' "$COMMENT")
+    COMMENT=$(COMMENT_BODY="$COMMENT" PR_FIELDS="$PR_FIELDS" PR_NUM="$PR_NUM" RESULTS_FILE="$RESULTS_FILE" MERGE_RISK_LINE="$MERGE_RISK_LINE" PLAN_LINE="${PLAN_LINE:-}" RUN_LINK="${RUN_LINK:-}" ADVISORY_FOOTER="${ADVISORY_FOOTER:-}" python3 - <<'PYEOF'
+import json, os, re
+
+def clip(text, n=360):
+    text = re.sub(r'\s+', ' ', str(text or '')).strip()
+    if len(text) <= n:
+        return text
+    return text[:n].rsplit(' ', 1)[0].rstrip(' ,.;:-') + '…'
+
+def first_lines(text, n=8):
+    return '\n'.join([l for l in str(text or '').splitlines() if l.strip()][-n:])
+
+def grade_label(bg):
+    if not isinstance(bg, dict):
+        return 'not run'
+    src = str(bg.get('source') or '').lower()
+    g = str(bg.get('grade') or '').lower()
+    text = ' '.join(str(bg.get(k) or '') for k in ('rationale', 'guidance', 'evidence'))
+    if re.search(r'sha\s*256[^\n]*(n/a|missing|unavailable)', text, re.I):
+        return 'insufficient hash evidence'
+    cited = src in ('reasoning', 'probe') and any(str(bg.get(k) or '').strip() for k in ('rationale', 'guidance', 'evidence'))
+    if g in ('none', 'low', 'medium', 'high') and cited:
+        conf = str(bg.get('confidence') or '').lower()
+        extra = f', {conf} confidence' if conf in ('low', 'medium', 'high') else ''
+        return f'{g}{extra}'
+    return 'not run'
+
+def verdict_from(pr, fields):
+    build = pr.get('build') or {}
+    test = pr.get('test') or {}
+    v2 = pr.get('verdict_v2') if isinstance(pr.get('verdict_v2'), dict) else {}
+    raw = build.get('verdict') or fields.get('verdict') or ''
+    mr = pr.get('merge_risk') or (pr.get('deterministic') or {}).get('merge_risk') or {}
+    tag = str(mr.get('tag') or '').lower()
+    bg = pr.get('behavioral_grade') or {}
+    bg_grade = str(bg.get('grade') or '').lower()
+    bg_changed = str(bg.get('behavior_changed') or '').lower() in ('true', '1', 'yes')
+    det = pr.get('deterministic') or {}
+    ch = det.get('changelogSignal') or {}
+    bullets = ' '.join(ch.get('bullets') or [])
+    changelog_breaking = str(ch.get('status') or '').lower() == 'breaking' and not re.search(r'\b(no|not|without|non[-\s]?breaking)\b.{0,60}\b(api change|breaking|incompatible|removed|behavior change)s?\b', bullets, re.I)
+    test_failed = bool(test.get('ran')) and test.get('exit') not in (0, None, -1)
+    build_failed = raw in ('fail', 'pre_existing_plus_new', 'vulns_introduced', 'conflict') or (build.get('pr_exit') not in (0, None, -1) and raw not in ('pre_existing', 'pass', 'security_review'))
+    false_safe = (test_failed or build_failed or tag == 'high' or bg_changed or bg_grade == 'high' or changelog_breaking)
+    if build_failed or v2.get('verdict') == 'BLOCKED':
+        return '⛔ BLOCKED', 'Do not merge until the failing build/security signal is resolved.'
+    if false_safe or v2.get('verdict') == 'REVIEW':
+        return '⚠️ REVIEW', 'Review the specific signal below, then merge only if it does not apply to your usage.'
+    return '✅ SAFE', 'Safe to merge based on the checked evidence.'
+
+def signal_summary(pr, fields):
+    build = pr.get('build') or {}
+    test = pr.get('test') or {}
+    bg = pr.get('behavioral_grade') or {}
+    files = fields.get('files_importing') or pr.get('files_importing') or pr.get('import_files') or []
+    parts = []
+    bv = build.get('verdict') or fields.get('verdict') or '?'
+    if bv in ('pass', 'security_review'):
+        parts.append(f'build pass (exit {build.get("pr_exit", 0)})')
+    elif bv == 'pre_existing':
+        parts.append('build same as main (pre-existing failures)')
+    else:
+        parts.append(f'build {bv} (exit {build.get("pr_exit", "?")})')
+    if test.get('ran'):
+        parts.append('tests pass' if test.get('exit') == 0 else f'tests fail (exit {test.get("exit")})')
+    else:
+        parts.append('tests not run')
+    parts.append(f'{len(files)} importing file(s)')
+    parts.append(f'behavioral probe: {grade_label(bg)}')
+    cves = pr.get('fixes_cves') or pr.get('cves') or []
+    if cves:
+        parts.append(f'CVE context: {len(cves)} item(s)')
+    return ' · '.join(parts)
+
+def cve_lines(pr):
+    out = []
+    fixes = pr.get('fixes_cves') or []
+    if fixes:
+        out.append('**CVE context:**')
+        for f in fixes[:4]:
+            if isinstance(f, dict):
+                cid = f.get('cve_id') or f.get('id') or 'advisory'
+                sev = (f.get('severity') or 'unknown').upper()
+                out.append(f'- `{cid}` ({sev}) — version-gated fix candidate; merging this PR moves toward the patched version.')
+    elif pr.get('cves'):
+        out.append('**CVE context:** ' + ', '.join(f'`{c}`' for c in pr.get('cves')[:6]) + ' (from PR/advisory metadata; reachability is not proven).')
+    else:
+        out.append('**CVE context:** no CVE/advisory fix matched this PR in the artifact.')
+    return '\n'.join(out)
+
+def ai_line(pr):
+    adj = pr.get('ai_adjudication')
+    if isinstance(adj, dict) and (adj.get('applied') or adj.get('evidence') or adj.get('reason_code')):
+        applied = adj.get('applied') or 'reviewed'
+        ev = clip(adj.get('evidence') or adj.get('reason_code') or '', 220)
+        return f'**AI arbiter:** {applied} — {ev}' if ev else f'**AI arbiter:** {applied}'
+    bg = pr.get('behavioral_grade') or {}
+    if any(str(bg.get(k) or '').strip() for k in ('rationale','guidance','evidence')):
+        return '**AI arbiter:** synthesized behavioral risk — ' + clip(bg.get('rationale') or bg.get('guidance') or bg.get('evidence'), 240)
+    return '**AI arbiter:** deterministic synthesis only — no LLM adjudication artifact was available; not shown as NOT-APPLICABLE.'
+
+try:
+    fields = json.loads(os.environ.get('PR_FIELDS') or '{}')
+except Exception:
+    fields = {}
+try:
+    with open(os.environ.get('RESULTS_FILE', '/tmp/build-results.json')) as fh:
+        data = json.load(fh)
+except Exception:
+    data = {'prs': {}}
+pr = (data.get('prs') or {}).get(str(os.environ.get('PR_NUM')), {})
+if not isinstance(pr, dict):
+    pr = {}
+package = fields.get('package') or pr.get('package') or '?'
+fr = fields.get('from') or pr.get('from') or '?'
+to = fields.get('to') or pr.get('to') or '?'
+dep_type = fields.get('dep_type') or pr.get('dep_type') or '?'
+bump = fields.get('bump') or pr.get('bump') or '?'
+verdict, recommendation = verdict_from(pr, fields)
+risk = os.environ.get('MERGE_RISK_LINE') or ''
+if not risk.strip():
+    mr = pr.get('merge_risk') or (pr.get('deterministic') or {}).get('merge_risk') or {}
+    risk = f"**Merge Risk: {mr.get('tag','Medium')}** (Evidence: {mr.get('evidenceAxis','limited evidence')} × Build verification: {mr.get('buildVerificationAxis') or pr.get('verification_label','unverified')}) — {mr.get('reason','change evidence is limited')}"
+what = []
+if verdict.startswith('✅'):
+    what.append(f'This {bump} upgrade has no blocking signal in the artifact. The build evidence and import scan do not show a regression introduced by `{package}`.')
+elif verdict.startswith('⛔'):
+    what.append('This upgrade has a blocking signal in the artifact. Do not merge until the failing build/security evidence is resolved.')
+else:
+    what.append('This upgrade has a non-green signal that a build alone cannot clear. Use the evidence below to decide whether the changed behavior reaches your code.')
+what.append(recommendation)
+files = fields.get('files_importing') or pr.get('files_importing') or pr.get('import_files') or []
+file_lines = '\n'.join(f'- `{str(f).split(":")[0]}`' for f in files[:8]) or '- No import files recorded in the artifact.'
+if len(files) > 8:
+    file_lines += f'\n- …and {len(files)-8} more.'
+build = pr.get('build') or {}
+test = pr.get('test') or {}
+how = [
+    f'- Build verdict: `{build.get("verdict", fields.get("verdict", "?"))}`; main exit `{build.get("main_exit", "?")}`, PR exit `{build.get("pr_exit", "?")}`.',
+    '- Tests: ' + (f'ran, exit `{test.get("exit")}`.' if test.get('ran') else 'not run; no behavioral-probe mitigation assumed.'),
+    f'- Behavioral probe: {grade_label(pr.get("behavioral_grade") or {})}.',
+    f'- Verification label: `{pr.get("verification_label") or fields.get("verification_label") or "unknown"}` (L0 unresolved, L2 build/type checked, L4 tests passed).'
+]
+if package.startswith('@types/') and not files:
+    how.append('- Type package caveat: `@types/*` can affect global TypeScript compilation even with zero direct imports; do not treat zero imports as proof of no reachability.')
+if pr.get('declared_break_reachability'):
+    r = pr.get('declared_break_reachability') or {}
+    how.append(f'- Declared-break reachability: checked={bool(r.get("checked"))}, prod_reachable={bool(r.get("prod_reachable"))}.')
+output = first_lines(build.get('output_tail') or fields.get('output_tail') or '', 10) or 'No build stdout captured.'
+run_link = os.environ.get('RUN_LINK','').strip()
+plan = os.environ.get('PLAN_LINE','').strip()
+footer = os.environ.get('ADVISORY_FOOTER','').strip()
+lines = ['<!-- breakability-check -->', f'## {verdict} — `{package}` {fr} → {to} · {dep_type} · {bump}', '', risk, '', signal_summary(pr, fields), '', '### What this means', ' '.join(what), '', cve_lines(pr), '', ai_line(pr)]
+if plan:
+    lines += ['', plan]
+lines += ['', '<details><summary>How we checked</summary>', '', *how, '</details>', '', '<details><summary>Files importing</summary>', '', file_lines, '</details>', '', '<details><summary>Build output</summary>', '', '```', output, '```', '</details>']
+if run_link:
+    lines += ['', run_link]
+if footer:
+    lines += ['', footer]
+print('\n'.join(lines))
+PYEOF
+)
     eval "$(get_verdict_v2 "$PR_NUM")"
     eval "$(get_behavioral_grade "$PR_NUM")"
     # Reset per-PR so a prior PR's residual evidence can never leak onto this one.
@@ -2852,11 +3017,12 @@ if blockers:
 |---|---|
 | Resolve | $(v2_signal_label "${V2_SIG_resolve:-UNAVAILABLE}") |
 | Build | $(v2_signal_label "${V2_SIG_build:-UNAVAILABLE}") |
-| Test | $(if [[ "$_TEST_FAILED" == "1" ]]; then printf '%s' "$_TEST_SIGNAL_CELL"; elif [[ "$VERDICT" == "pre_existing" || -n "${TEST_FAIL_DETAIL:-}" ]]; then printf '⚠️ pre-existing failures — tests did not re-verify clean'; elif [[ "${TEST_RAN:-False}" != "True" ]]; then printf '· not run (no test suite or tests not executed)'; else v2_signal_label "${V2_SIG_test:-UNAVAILABLE}"; fi) |
+| Test | $(if [[ "$_TEST_FAILED" == "1" ]]; then printf '%s' "$_TEST_SIGNAL_CELL"; elif [[ "$VERDICT" == "pre_existing" || -n "${TEST_FAIL_DETAIL:-}" ]]; then printf '⚠️ pre-existing failures — tests did not re-verify clean'; elif [[ "${TEST_RAN:-False}" != "True" ]]; then printf '· not run (no behavioral-probe mitigation assumed)'; else v2_signal_label "${V2_SIG_test:-UNAVAILABLE}"; fi) |
 | API diff | $(v2_signal_label "${V2_SIG_api_diff:-UNAVAILABLE}") |
 | Usage | $(v2_signal_label "${V2_SIG_usage:-UNAVAILABLE}") |
 | Vulnerability | $(v2_signal_label "${V2_SIG_vuln:-UNAVAILABLE}") |
 | Changelog | $(v2_signal_label "${V2_SIG_changelog:-UNAVAILABLE}") |"
+    if false; then
     COMMENT=$(COMMENT_BODY="$COMMENT" V2_HEADLINE="$_V2_HEADLINE" V2_COMPANION_BANNER="${_COMPANION_BANNER:-}" V2_RESIDUAL_BLOCK="${_V2_RESIDUAL_BLOCK:-}" V2_SIGNALS_TABLE="$_V2_SIGNALS_TABLE" python3 -c '
 import os
 
@@ -2896,6 +3062,7 @@ for line in body.splitlines():
 body = "\n".join(normalized)
 print(body)
 ' 2>/dev/null || printf '%s' "$COMMENT")
+    fi
     if gh_pr_comment "$PR_NUM" "$COMMENT"; then
       echo "  Posted comment for PR #$PR_NUM ($PKG ${FROM}→${TO}, $VERDICT)"
       POSTED=$((POSTED + 1))
@@ -3310,7 +3477,12 @@ if _act_med_risk > 0:
 if _act_low_risk > 0 and not _act_msg:
     _act_msg.append(f"✅ **Most are safe:** {_act_low_risk} routine upgrades ready to merge.")
 if not _act_msg:
-    _act_msg.append("✅ **All clear:** All PRs are ready to merge.")
+    if not prs:
+        _act_msg.append("⚠️ **No analyzed PRs:** this run produced no PR results, so there is no merge order. Re-run the analysis before merging.")
+    elif meta.get('incomplete'):
+        _act_msg.append("⚠️ **Incomplete run:** do not treat this as all clear; re-run missing batches before merging.")
+    else:
+        _act_msg.append("✅ **All clear:** All analyzed PRs are ready to merge.")
 for msg in _act_msg:
     lines.append(f"- {msg}")
 lines.append("")
@@ -3538,6 +3710,13 @@ _non_sec_blocked = [e for e in blocked if not e.get("cves")]
 if _non_sec_blocked:
     lines.append(f"{_step}. **FIX NEEDED:** {len(_non_sec_blocked)} PR(s) have blocking verification issues")
     _step += 1
+if _step == 1:
+    if not prs:
+        lines.append(f"{_step}. **NO MERGE ORDER AVAILABLE:** zero PRs were analyzed in this run — re-run breakability analysis.")
+    elif meta.get('incomplete'):
+        lines.append(f"{_step}. **RERUN REQUIRED:** this run is incomplete; do not merge from this plan until missing PRs are analyzed.")
+    else:
+        lines.append(f"{_step}. **MERGE:** all analyzed PRs are clear.")
 lines.append("")
 
 # Infrastructure banner — when many PRs are in review with the same root cause

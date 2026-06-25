@@ -96,6 +96,7 @@ def in_range(tag):
         return False
     return lo < tv <= hi
 pat = re.compile(r"\b(BREAKING|breaking[\s-]?change|backward[\s-]?incompatible|migration[\s-]?required|removed?|incompatible|default(?:s| value)?\s+(?:change|changed|now)|deprecated|renamed|deleted|no longer|behavior change|API change)\b", re.I)
+neg = re.compile(r"\b(no|not|without|non[-\s]?breaking|does not|did not)\b.{0,60}\b(api change|breaking|incompatible|removed|behavior change)s?\b|\b(api change|breaking change)s?\b.{0,60}\b(no|not|without|none)\b", re.I)
 lines = []
 for rel in releases:
     tag = rel.get("tag_name") or rel.get("name") or ""
@@ -103,7 +104,7 @@ for rel in releases:
     text = "\n".join([str(rel.get("name") or tag), str(rel.get("body") or "")])
     for line in text.splitlines():
         line = line.strip(" -*\t")
-        if line and pat.search(line):
+        if line and pat.search(line) and not neg.search(line):
             lines.append(line[:300])
 # CHANGELOG.md: scope to the section between to and from headers to avoid stale matches.
 if changelog:
@@ -122,7 +123,7 @@ if changelog:
                 capture = any(v == tup(to_v) for v in vs)
         if capture:
             s = line.strip(" -*\t")
-            if s and pat.search(s):
+            if s and pat.search(s) and not neg.search(s):
                 sect.append(s[:300])
         if len(sect) >= 40: break
     lines.extend(sect)
@@ -2539,14 +2540,18 @@ print(json.dumps(det))
               rewrite_private_deps_to_local "$BUILD_DIR" "$PR_WORKTREE"
               FALLBACK_OUT=$(cd "$BUILD_DIR" && timeout $TIMEOUT npm install --ignore-scripts --legacy-peer-deps 2>&1)
               _FALLBACK_RC=$?
-              BUILD_OUTPUT="$BUILD_OUTPUT
---- npm install fallback ---
-$FALLBACK_OUT"
               EVIDENCE_DEP_COMMAND="npm ci --ignore-scripts; npm install --ignore-scripts --legacy-peer-deps"
               if [[ "$_FALLBACK_RC" -eq 0 ]]; then
                 echo "  npm install fallback: SUCCESS"
                 PR_INSTALL_EXIT=0
                 INSTALL_METHOD="install_fallback"
+                BUILD_OUTPUT="npm ci failed with ${ERROR_CLASS}; npm install fallback succeeded.
+--- npm install fallback (successful) ---
+$FALLBACK_OUT"
+              else
+                BUILD_OUTPUT="$BUILD_OUTPUT
+--- npm install fallback (failed) ---
+$FALLBACK_OUT"
               fi
             elif [[ "$ERROR_CLASS" == "infra_error" ]]; then
               # ── Workspace-local fallback ──
@@ -2557,15 +2562,18 @@ $FALLBACK_OUT"
               rewrite_private_deps_to_local "$BUILD_DIR" "$PR_WORKTREE"
               FALLBACK_OUT=$(cd "$BUILD_DIR" && timeout $TIMEOUT npm install --ignore-scripts --legacy-peer-deps 2>&1)
               _FALLBACK_RC=$?
-              BUILD_OUTPUT="$BUILD_OUTPUT
---- npm install fallback ---
-$FALLBACK_OUT"
               EVIDENCE_DEP_COMMAND="npm ci --ignore-scripts; npm install --ignore-scripts --legacy-peer-deps"
               if [[ "$_FALLBACK_RC" -eq 0 ]]; then
                 echo "  workspace-local fallback: SUCCESS"
                 PR_INSTALL_EXIT=0
                 INSTALL_METHOD="local_fallback"
+                BUILD_OUTPUT="npm ci failed with ${ERROR_CLASS}; workspace-local npm install fallback succeeded.
+--- npm install fallback (successful) ---
+$FALLBACK_OUT"
               else
+                BUILD_OUTPUT="$BUILD_OUTPUT
+--- npm install fallback (failed) ---
+$FALLBACK_OUT"
                 INSTALL_METHOD="infra_error"
                 echo "  INFRA_ERROR: registry auth failure (workspace fallback also failed)"
               fi

@@ -211,6 +211,8 @@ KNOWN_DEPS = {
     ("react", "react-dom"): ("react and react-dom must match", "merge together"),
     ("react", "@types/react"): ("types follow react", "react first"),
     ("react-dom", "@types/react-dom"): ("types follow react-dom", "react-dom first"),
+    ("eslint", "@typescript-eslint/parser"): ("ESLint parser peer dependency — parser must support the ESLint major", "merge parser-compatible PR first"),
+    ("@typescript-eslint/eslint-plugin", "@typescript-eslint/parser"): ("TypeScript ESLint plugin/parser pair must stay in lockstep", "merge together"),
 }
 try:
     with open(os.environ.get("PEER_GROUPS_FILE", "/tmp/_bc_peer_groups.json")) as f: pd = json.load(f)
@@ -264,6 +266,19 @@ for pkg, entries in same_pkg_groups.items():
             nums = [n for n, _ in entries]
             if len(set(dirs)) > 1:
                 print(f"  Same package group: {pkg} in {len(entries)} modules (PRs: {', '.join('#'+n for n in nums)})")
+# Same package duplicated across open PRs for any ecosystem (e.g. @types/node duplicate Dependabot PRs).
+duplicate_pkg_groups = {}
+for num, pr in prs.items():
+    key = (pr.get("ecosystem", ""), pr.get("package", ""), pr.get("to", ""))
+    if key[1] and key[2]:
+        duplicate_pkg_groups.setdefault(key, []).append(num)
+for (eco, pkg, to_ver), nums in duplicate_pkg_groups.items():
+    if len(nums) > 1:
+        for i, na in enumerate(nums):
+            for nb in nums[i+1:]:
+                if not any((d["pr_a"]==int(na) and d["pr_b"]==int(nb)) or (d["pr_a"]==int(nb) and d["pr_b"]==int(na)) for d in cross_deps):
+                    cross_deps.append({"pr_a": int(na), "pr_b": int(nb), "reason": f"Duplicate {eco} upgrade: {pkg} -> {to_ver} appears in multiple PRs", "merge_order": "merge only one; close/rebase duplicate"})
+        print(f"  Duplicate package group: {pkg} -> {to_ver} (PRs: {', '.join('#'+str(n) for n in nums)})")
 # K8s module coordination: k8s.io modules must be upgraded together
 K8S_MODULES = {"k8s.io/api", "k8s.io/apimachinery", "k8s.io/client-go", "k8s.io/apiserver", "k8s.io/apiextensions-apiserver"}
 k8s_prs = [(num, pr["package"]) for num, pr in prs.items() if any(pr.get("package", "").startswith(m) for m in K8S_MODULES)]
