@@ -2353,7 +2353,7 @@ except Exception as e:
 
     if python3 -c "import json; json.load(open('$CLI_JSON_FILE'))" 2>/dev/null; then
       DETERMINISTIC=$(BC_FILES_IMPORTING="$FILES_IMPORTING" python3 -c "
-import json, sys, os
+import json, sys, os, re
 with open('$CLI_JSON_FILE') as f:
     data = json.load(f)
 # ── Reconcile usages with the authoritative module-scoped import scan ──
@@ -2374,11 +2374,28 @@ if not isinstance(_usages, list):
     _usages = []
 # NOT REACHED gate: when the scoped import scan finds zero importing files in the
 # bumped module, the package is not reachable and there can be no reachable callsite.
-# Force usages=[] so deterministic.usages stays consistent with the (empty) module-
-# scoped import scan and the renderer says 'review the changelog' instead of inventing
-# callsites to verify. Both files_importing and usages are then empty for NOT REACHED.
-if not _files_importing:
+# Exception: @types/* packages can contribute ambient/global TypeScript declarations
+# without an explicit import, so zero direct imports is NOT proof of no reachability.
+if not _files_importing and not '$PKG'.startswith('@types/'):
     _usages = []
+
+neg = re.compile(r'\b(no|not|without|non[-\s]?breaking|does not|did not)\b.{0,80}\b(api change|breaking|incompatible|removed|behavior change)s?\b|\b(api change|breaking change)s?\b.{0,80}\b(no|not|without|none)\b', re.I)
+sig = data.get('changelogSignal')
+if isinstance(sig, dict):
+    bullets = sig.get('bullets') or []
+    clean_bullets = []
+    for b in bullets:
+        if not isinstance(b, str):
+            continue
+        flat = re.sub(r'\s+', ' ', b).strip()
+        if flat and not neg.search(flat):
+            clean_bullets.append(b)
+    sig = dict(sig)
+    sig['bullets'] = clean_bullets
+    if str(sig.get('status') or '').lower() == 'breaking' and not clean_bullets:
+        sig['status'] = 'none'
+        sig['confidence'] = 'low'
+        sig['summary'] = 'No non-negated breaking-change evidence found in the analyzed changelog.'
 result = {
   'api_changes': len(data.get('apiChanges', [])),
   'api_changes_detail': data.get('apiChanges', []),
@@ -2397,7 +2414,7 @@ result = {
   'api_diff_tool': data.get('apiDiffTool', None),
   'security': data.get('securityUpdate', None),
   'changelogText': data.get('changelogText', ''),
-  'changelogSignal': data.get('changelogSignal', None)
+  'changelogSignal': sig
 }
 print(json.dumps(result))
 " 2>/dev/null || echo "{}")
@@ -4241,6 +4258,13 @@ def _resolve_declared_break_reachability(pr_data, deterministic, eco):
     mr = pr_data.get("merge_risk") or {}
     evidence_axis = (mr.get("evidenceAxis") or "").lower()
     sig = (deterministic or {}).get("changelogSignal") or {}
+    neg = _dbr_re.compile(r"\b(no|not|without|non[-\s]?breaking|does not|did not)\b.{0,80}\b(api change|breaking|incompatible|removed|behavior change)s?\b|\b(api change|breaking change)s?\b.{0,80}\b(no|not|without|none)\b", _dbr_re.I)
+    bullets = [b for b in (sig.get("bullets") or []) if isinstance(b, str) and not neg.search(b)]
+    if str(sig.get("status") or "").lower() == "breaking" and not bullets:
+        mr["tag"] = "Low"
+        mr["reason"] = "changelog only contained negated no-change language; no non-negated breaking-change evidence found"
+        mr["evidenceAxis"] = "changelog negation filtered"
+        return
     # Only the changelog-DECLARED-break High path (merge-risk evidenceAxis
     # "declared breaking change (changelog), behavior unverified") may be downgraded here. A High
     # driven by an independently CONFIRMED signal — "break-reachable API change", "runtime support
@@ -4249,7 +4273,6 @@ def _resolve_declared_break_reachability(pr_data, deterministic, eco):
     is_declared = mr.get("tag") == "High" and "declared breaking change" in evidence_axis
     if not is_declared:
         return
-    bullets = sig.get("bullets") or []
     # STRONG markers only: a genuine break, not a deprecation/additive note. This keeps us from
     # extracting incidental package names (e.g. an EMPTY-type deprecation) as the affected path.
     strong_re = _dbr_re.compile(r"breaking[\s-]?change|no longer|cardinalit|migration[\s-]?required|removed\s|signature|incompatible|default[s]?\s+(?:changed|now|of|to)", _dbr_re.I)

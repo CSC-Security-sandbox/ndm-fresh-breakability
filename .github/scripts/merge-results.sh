@@ -12,7 +12,7 @@
 #   - /tmp/batch-results/batch-*/_bc_peer_groups.json   (from any batch)
 #   - GH_TOKEN / GITHUB_TOKEN env
 # ──────────────────────────────────────────────────────────────────────────────
-set -u
+set -euo pipefail
 export LC_ALL=en_US.UTF-8
 unset GH_TOKEN
 
@@ -148,7 +148,18 @@ if expected_count > 0 and total_prs < expected_count:
     merged["metadata"]["expected_pr_count"] = expected_count
     merged["metadata"]["missing_pr_count"] = expected_count - total_prs
     print(f"  ⚠️  INCOMPLETE: expected {expected_count} PRs, got {total_prs} ({expected_count - total_prs} missing)")
+elif subset_requested and merged["metadata"].get("missing_pr_numbers"):
+    merged["metadata"]["incomplete"] = True
+    merged["metadata"]["expected_pr_count"] = len(merged["metadata"].get("requested_pr_numbers") or [])
+    merged["metadata"]["missing_pr_count"] = len(merged["metadata"].get("missing_pr_numbers") or [])
+    print(f"  ⚠️  INCOMPLETE: missing requested PRs: {merged['metadata']['missing_pr_numbers']}")
+elif total_prs == 0 and (batch_files or all_batch_dirs):
+    merged["metadata"]["incomplete"] = True
+    merged["metadata"]["expected_pr_count"] = expected_count or len(all_batch_dirs)
+    merged["metadata"]["missing_pr_count"] = expected_count or len(all_batch_dirs)
+    print("  ⚠️  INCOMPLETE: no PR results were merged")
 if incomplete_batches:
+    merged["metadata"]["incomplete"] = True
     merged["metadata"]["incomplete_batches"] = incomplete_batches
 
 # V9.9: COMPATIBILITY SHIM — Convert .prs{} → .results[] for backward compatibility
