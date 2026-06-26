@@ -1,845 +1,269 @@
 #!/usr/bin/env python3
 """
-breakability_analyst.py - Rich comment renderer for PR analysis
+breakability_analyst.py - Compact PR comment renderer for breakability analysis.
 
-Reads build-results.json and produces gold-standard format comments
-with all 13 mandatory sections.
-
-Based on PR #208 gold standard:
-https://github.com/CSC-Security-sandbox/ndm-breakability-test/pull/208#issuecomment-4737308189
+Reads build-results.json and produces ~40-line comments per PR with collapsible
+evidence details. Called by breakability-agent.yml workflow (line 346).
 """
 import json
 import sys
 import os
 from typing import Dict, Any, List, Optional
+from verdict_contract import authoritative_verdict as _authoritative_verdict
 
-def format_verdict_header(pr: Dict[str, Any]) -> str:
-    """Format the verdict header with emoji, confidence, priority."""
-    verdict = pr.get("verdict_v2", {}).get("verdict", "REVIEW")
-    confidence = pr.get("verdict_v2", {}).get("confidence", "MEDIUM")
-    severity = pr.get("verdict_v2", {}).get("severity", "medium")
-    priority = pr.get("verdict_v2", {}).get("priority", "P2")
-    
-    pkg = pr.get("package", "unknown")
-    from_ver = pr.get("from", "?")
-    to_ver = pr.get("to", "?")
-    bump = pr.get("bump", "unknown")
-    dep_type = pr.get("dep_type", "dependency")
-    
-    # Map verdict to emoji and label
-    verdict_map = {
-        "SAFE": ("✅", "SAFE", "None"),
-        "REVIEW": ("🟠", "REVIEW REQUIRED", severity.title()),
-        "BUILD_FAILS": ("❌", "BUILD FAILS", "Critical"),
-        "BLOCKED": ("🔴", "BLOCKED", "High")
+
+# ── Normalizers ───────────────────────────────────────────────────────────────
+
+def _normalize_verdict(pr: Dict) -> Dict[str, str]:
+    v = _authoritative_verdict(pr)
+    return {
+        "verdict": v.get("verdict", "REVIEW"),
+        "confidence": v.get("confidence", "MEDIUM"),
+        "severity": v.get("severity", "medium"),
+        "priority": v.get("priority", "P2"),
     }
-    emoji, label, breakability = verdict_map.get(verdict, ("⚠️", "REVIEW", "Medium"))
-    
-    return f"""## {emoji} Breakability Analysis — {label} ({bump.title()}, Reachable, Behavioral Changes)
 
-**Package:** `{pkg}` {from_ver} → {to_ver}  
-**Bump Type:** {bump} · **Dep Type:** {dep_type} · **Priority:** {priority}  
-**Verdict:** {emoji} **{label}** · **Confidence:** {confidence.upper()}
 
-**Headline:** {pr.get('verdict_v2', {}).get('reason', 'Review required for this upgrade.')}
+def _normalize_changelog(det: Dict) -> Dict[str, Any]:
+    cl = det.get("changelogSignal")
 
-**Recommendation:** {_get_recommendation(pr)}
+    if not cl:
+        return {"status": "missing", "bullets": [], "is_breaking": False, "available": False}
 
----
-"""
-
-def format_signal_summary(pr: Dict[str, Any]) -> str:
-    """Format the 7-layer signal summary table."""
-    det = pr.get("deterministic", {})
-    build = pr.get("build", {})
-    test = pr.get("test", {})
-    
-    # Map signals to results
-    signals = [
-        ("🔧 Build", _format_build_signal(build), _get_build_confidence(build)),
-        ("🧪 Test", _format_test_signal(test), _get_test_confidence(test)),
-        ("📝 API Diff", _format_api_diff_signal(det), "HIGH" if (det.get("api_changes") or 0) > 0 else "N/A"),
-        ("📋 Changelog", _format_changelog_signal(det), "HIGH" if det.get("changelogSignal") else "LOW"),
-        ("🔍 Reachability", _format_reachability_signal(pr), "HIGH"),
-        ("🔬 Behavioral Probe", _format_probe_signal(pr), "HIGH"),
-        ("🤖 AI Arbiter", _format_ai_signal(pr), "N/A")
-    ]
-    
-    table = """### 📊 Signal Summary
-
-| Layer | Result | Confidence | Evidence |
-|-------|--------|------------|----------|
-"""
-    for layer, result, conf in signals:
-        evidence = _get_evidence_summary(pr, layer)
-        table += f"| {layer} | {result} | {conf} | {evidence} |\n"
-    
-    signal_agreement = _count_warning_signals(signals)
-    table += f"\n**Signal Agreement:** {signal_agreement} signals warn → {pr.get('verdict_v2', {}).get('verdict', 'REVIEW')}\n\n---\n"
-    
-    return table
-
-def format_build_analysis(pr: Dict[str, Any]) -> str:
-    """Format detailed build analysis section."""
-    build = pr.get("build", {})
-    verdict = build.get("verdict", "unknown")
-    ver_label = pr.get("verification_label", "L1")
-    
-    status_emoji = {"pass": "✅", "fail": "❌", "pre_existing": "⚠️"}.get(verdict, "⚙️")
-    
-    section = f"""### 🔧 Build Analysis
-**Status:** {status_emoji} **{verdict.upper().replace('_', ' ')}** | **Verification Level:** {ver_label}
-
-**What we checked:**
-"""
-    
-    # Add build steps
-    steps = []
-    if build.get("verdict"):
-        if verdict == "pass":
-            steps.append("✅ Dependencies resolved successfully")
-            steps.append(f"✅ Build passes (exit {build.get('pr_exit', 0)})")
-        elif verdict == "fail":
-            steps.append("❌ Build failed with new errors")
-        elif verdict == "pre_existing":
-            steps.append("⚠️ Build fails on both `main` and PR branch with same errors")
-            steps.append("✅ No NEW errors introduced by this upgrade")
-    
-    for step in steps:
-        section += f"- {step}\n"
-    
-    # Add build output
-    if build.get("output_tail"):
-        section += f"\n**Build Output:**\n```\n{build['output_tail'][:500]}\n```\n"
-    
-    section += f"\n**Confidence:** **{_get_build_confidence(build)}** — {_get_build_confidence_reason(build)}\n\n---\n"
-    
-    return section
-
-def format_test_analysis(pr: Dict[str, Any]) -> str:
-    """Format test analysis section."""
-    test = pr.get("test", {})
-    verdict = test.get("verdict", "skip")
-    reason = test.get("reason", "Build prerequisites not met")
-    
-    status_emoji = {"pass": "✅", "fail": "❌", "skip": "⚠️"}.get(verdict, "⬜")
-    status_label = verdict.upper().replace("_", " ")
-    
-    section = f"""### 🧪 Test Analysis
-**Status:** {status_emoji} **{status_label}** | **Reason:** {reason}
-
-**What we checked:**
-"""
-    
-    if verdict == "pass":
-        section += f"- ✅ Test suite executed successfully\n"
-        section += f"- ✅ All tests passed (exit {test.get('exit_code', 0)})\n"
-        section += f"- Tests run: {test.get('tests_run', 'N/A')}\n"
-    elif verdict == "fail":
-        section += f"- ❌ Test failures detected\n"
-        section += f"- Failed: {test.get('failed_count', 'N/A')} | Passed: {test.get('passed_count', 'N/A')}\n"
-    else:
-        section += f"- Test execution skipped ({reason})\n"
-        section += f"- Cannot verify runtime behavior via tests\n"
-    
-    confidence = "HIGH" if verdict == "pass" else "LOW"
-    section += f"\n**Confidence:** **{confidence}** — {'Test suite provides runtime verification' if verdict == 'pass' else 'No test evidence (mitigated by behavioral probe below)'}.\n\n---\n"
-    
-    return section
-
-def format_api_diff_analysis(pr: Dict[str, Any]) -> str:
-    """Format API diff analysis section with detailed changes."""
-    det = pr.get("deterministic", {})
-    changes = det.get("api_changes") or 0
-    removed = det.get("api_removed") or 0
-    added = det.get("api_added") or 0
-    
-    if changes == 0 and removed == 0 and added == 0:
-        return """### 📝 API Diff Analysis
-**Status:** ✅ **CLEAN** | **Tool:** api-diff (semantic analysis)
-
-**What we checked:**
-- No breaking changes detected
-- All exports remain stable
-
-**Confidence:** **HIGH** — No API changes.
-
----
-"""
-    
-    section = f"""### 📝 API Diff Analysis
-**Status:** ⚠️ **BREAKING** | **Tool:** api-diff (semantic analysis)
-
-**What we checked:**
-- Removed exports: **{removed}**
-- Changed exports: **{changes}** (signature/implementation changes)
-- Added exports: **{added}**
-"""
-    
-    # Add API changes details if available
-    api_details = det.get("api_details", "")
-    if api_details:
-        section += f"\n**API Changes:**\n```typescript\n{api_details[:800]}\n```\n"
-    
-    section += f"\n**Confidence:** **HIGH** — Semantic analysis confirms API surface changes.\n\n---\n"
-    
-    return section
-
-def format_changelog_analysis(pr: Dict[str, Any]) -> str:
-    """Format changelog analysis section."""
-    det = pr.get("deterministic", {})
-    cl = det.get("changelogSignal", {})
-    
     if isinstance(cl, str):
-        # Legacy format: just a string like "breaking" or "clean"
-        status = "⚠️ **BREAKING**" if cl == "breaking" else "✅ CLEAN"
-        section = f"""### 📋 Changelog Analysis
-**Status:** {status} | **Source:** Package changelog
+        return {
+            "status": cl,
+            "bullets": [],
+            "is_breaking": cl == "breaking",
+            "available": cl != "missing"
+        }
 
-**M8 Classification:** **{cl.upper()}**
+    if not isinstance(cl, dict):
+        return {"status": "missing", "bullets": [], "is_breaking": False, "available": False}
 
-**Confidence:** **MEDIUM** — Based on changelog signal.
+    status = cl.get("status", "unknown")
+    bullets = cl.get("bullets", [])
 
----
-"""
-        return section
-    
-    breaking_markers = cl.get("breaking_markers", 0)
-    has_changelog = cl.get("status") != "missing"
-    
-    if not has_changelog:
-        return """### 📋 Changelog Analysis
-**Status:** ⚪ **NOT AVAILABLE** | **Source:** No changelog found
+    if bullets is None:
+        bullets = []
+    elif isinstance(bullets, str):
+        bullets = [bullets] if bullets else []
+    elif not isinstance(bullets, list):
+        bullets = []
 
-**Confidence:** **LOW** — Cannot assess changes without changelog.
+    has_breaking_in_bullets = any(
+        "BREAKING" in str(bullet).upper() or "BREAK" in str(bullet).upper()
+        for bullet in bullets
+    )
 
----
-"""
-    
-    status = "⚠️ **BREAKING**" if breaking_markers > 0 else "✅ CLEAN"
-    
-    section = f"""### 📋 Changelog Analysis
-**Status:** {status} | **Source:** GitHub Releases / CHANGELOG.md
+    _negation_patterns = ["no api change", "no breaking change", "bug fix and maintenance"]
+    all_bullets_negated = (
+        status == "breaking" and bullets and
+        all(any(neg in str(b).lower() for neg in _negation_patterns) for b in bullets)
+    )
+    if all_bullets_negated:
+        status = "clean"
+        has_breaking_in_bullets = False
 
-**Key Changes (from {pr.get('from', '?')} → {pr.get('to', '?')}):**
-"""
-    
-    changes = cl.get("changes", [])
-    if changes:
-        for change in changes[:10]:  # First 10 changes
-            section += f"- {change}\n"
-    else:
-        section += f"- **Breaking markers:** {breaking_markers}\n"
-    
-    m8_class = "BREAKING" if breaking_markers > 0 else "SAFE"
-    section += f"\n**M8 Classification:** **{m8_class}**\n"
-    section += f"\n**Confidence:** **HIGH** — Explicit version documentation available.\n\n---\n"
-    
-    return section
+    is_breaking = status == "breaking" or has_breaking_in_bullets
+    available = status != "missing" or len(bullets) > 0
 
-def format_reachability_analysis(pr: Dict[str, Any]) -> str:
-    """Format reachability analysis section with callsite detail."""
-    det = pr.get("deterministic", {})
-    reachable = det.get("reachable", False)
-    import_files = det.get("import_files", [])
-    
-    if not reachable or not import_files:
-        return """### 🔍 Reachability Analysis
-**Status:** ✅ **NOT REACHED** | **Import scan:** No production imports
-
-**What we checked:**
-- Import scan: **0 production files** import this package
-- Package appears to be unused or dev-only dependency
-
-**Confidence:** **HIGH** — Static analysis confirms no imports.
-
----
-"""
-    
-    pkg = pr.get("package", "unknown")
-    
-    # Enhanced section with callsite detail
-    section = f"""### 🔍 Reachability Analysis
-**Status:** ⚠️ **REACHED** | **Import scan:** {len(import_files)} file(s) import this package
-
-**What we checked:**
-- Import scan: **{len(import_files)} production file(s)** import `{pkg}`
-- Static analysis: Found import statements in codebase
-
-**Files Importing This Package:**
-```
-"""
-    
-    # Add file:line detail for each import
-    for file in import_files[:10]:  # First 10 files
-        section += f"{file}\n"
-        # Add callsite detail if available
-        callsites = det.get("callsites", {}).get(file, [])
-        if callsites:
-            for cs in callsites[:3]:  # First 3 callsites per file
-                line = cs.get("line", "?")
-                symbol = cs.get("symbol", "?")
-                section += f"  Line {line}: {symbol}\n"
-    
-    if len(import_files) > 10:
-        section += f"... and {len(import_files) - 10} more files\n"
-    
-    section += f"""```
-
-**Callsite Impact:**
-- Package is actively used in production code
-- Breaking changes could affect {len(import_files)} file(s)
-- **Recommendation:** Review all callsites to verify compatibility
-
-"""
-    
-    # Add callgraph analysis if available
-    api_changes = det.get("api_changes") or 0
-    if api_changes > 0:
-        section += f"""**Breaking Change Risk:**
-- API changes detected: {api_changes} exports modified
-- Each import site should be verified against new signatures
-- Risk level: {"HIGH" if api_changes > 5 else "MEDIUM"}
-
-"""
-    
-    section += f"""**Confidence:** **HIGH** — Import scan confirms usage.
-
-**Next Steps:** Review the specific symbols called at each import site to ensure compatibility with the new version.
-
----
-"""
-    
-    return section
-
-def format_ai_arbiter_section(pr: Dict[str, Any]) -> str:
-    """Format AI arbiter layer section."""
-    ai = pr.get("ai_adjudication") or pr.get("ai_verdict", {})
-    
-    if not ai:
-        verdict_v2 = pr.get("verdict_v2", {}).get("verdict", "REVIEW")
-        return f"""### 🤖 AI Arbiter Layer
-**Status:** ⬜ **NOT-APPLICABLE** (human review required)
-
-**Why NOT applied:**
-The AI arbiter engages for break-reachable cases where signals conflict and automated adjudication could reduce false positives. In this case, deterministic signals recommend **{verdict_v2}** and no conflict exists to resolve.
-
-**Policy:** When deterministic signals unanimously recommend a clear verdict, AI does not override (fail-safe principle).
-
----
-"""
-    
-    applied = ai.get("applied", "not_applied")
-    reason = ai.get("reason", "No AI adjudication performed")
-    
-    if applied == "downgrade_to_safe":
-        status = "✅ **SAFE** (AI downgraded from REVIEW)"
-    elif applied == "needs_change":
-        status = "⚠️ **REVIEW** (AI confirmed)"
-    else:
-        status = "⬜ **NOT-APPLICABLE**"
-    
-    section = f"""### 🤖 AI Arbiter Layer
-**Status:** {status}
-
-**AI Decision:**
-{reason}
-
-**Model:** {pr.get('ai_model', 'claude-sonnet-4.5')}  
-**Confidence:** {ai.get('confidence', 'MEDIUM')}
-
----
-"""
-    
-    return section
-
-def format_policy_decision(pr: Dict[str, Any]) -> str:
-    """Format policy decision section with clear precedence hierarchy."""
-    verdict_v2 = pr.get("verdict_v2", {})
-    verdict = verdict_v2.get("verdict", "REVIEW")
-    confidence = verdict_v2.get("confidence", "MEDIUM")
-    
-    section = f"""### 🧮 Policy Decision
-**How the verdict was reached:**
-
-The final verdict follows a **strict precedence hierarchy** (fail-safe design):
-
-```
-Precedence Order (highest to lowest):
-1. Build Failures → BLOCKED (nothing works = immediate block)
-2. Security/CVE → BLOCKED (safety-critical, never auto-merge)
-3. Behavioral Probe DIFFERENT → REVIEW (runtime changes = human verify)
-4. Reached + Breaking API/Changelog → REVIEW (impact confirmed)
-5. AI Arbiter Downgrade → SAFE (low-risk after analysis)
-6. Default (no warnings) → SAFE (appears safe to merge)
-```
-
-**This PR's Decision Path:**
-"""
-    
-    # Reconstruct decision path with precedence labels
-    steps = []
-    final_reason = None
-    
-    build = pr.get("build", {})
-    if build.get("verdict") == "fail":
-        steps.append("❌ **[P1: Build]** Build completely fails → **BLOCKED**")
-        final_reason = "Build failure blocks merge (precedence #1)"
-    elif build.get("verdict") == "pre_existing":
-        steps.append("⚠️ **[P1: Build]** Pre-existing failures (not caused by this upgrade)")
-    else:
-        steps.append("✅ **[P1: Build]** Build passes")
-    
-    # Check security/CVE (precedence #2)
-    cve = pr.get("deterministic", {}).get("cve")
-    if cve and cve.get("found"):
-        steps.append("🔴 **[P2: Security]** CVE detected → **BLOCKED**")
-        final_reason = "Security advisory blocks merge (precedence #2)"
-    
-    # Check behavioral probe (precedence #3)
-    probe = pr.get("behavioral_grade") or pr.get("deterministic", {}).get("probe", {})
-    if probe.get("same_behavior") == False or probe.get("different"):
-        steps.append("⚠️ **[P3: Probe]** Runtime behavior changed → **REVIEW**")
-        if not final_reason:
-            final_reason = "Behavioral changes require review (precedence #3)"
-    
-    # Check reachability + breaking (precedence #4)
-    det = pr.get("deterministic", {})
-    if det.get("reachable") and ((det.get("api_changes") or 0) > 0 or det.get("changelogSignal") == "breaking"):
-        steps.append("⚠️ **[P4: Breaking]** Reached + API/changelog breaking → **REVIEW**")
-        if not final_reason:
-            final_reason = "Breaking changes in reached code (precedence #4)"
-    
-    # Check AI arbiter (precedence #5)
-    ai = pr.get("ai_adjudication")
-    if ai and ai.get("applied") == "downgrade_to_safe":
-        steps.append("✅ **[P5: AI]** AI arbiter analyzed and downgraded to **SAFE**")
-        if not final_reason:
-            final_reason = "AI confirmed low risk after analysis (precedence #5)"
-    
-    # Default case (precedence #6)
-    if not final_reason:
-        final_reason = "No warning signals detected (precedence #6 default)"
-    
-    for step in steps:
-        section += f"{step}\n"
-    
-    section += f"""
-**Final Verdict:** **{verdict}** (Confidence: {confidence})
-
-**Why {verdict}?** {final_reason}
-
-**Precedence Applied:** The highest-precedence rule that matched determined the verdict. Lower-precedence rules were not consulted (fail-safe cascade).
-
----
-"""
-    
-    return section
-
-def format_final_recommendation(pr: Dict[str, Any]) -> str:
-    """Format final recommendation section."""
-    verdict = pr.get("verdict_v2", {}).get("verdict", "REVIEW")
-    
-    recommendations = {
-        "SAFE": "✅ **MERGE** — No breaking changes detected. Safe to auto-merge.",
-        "REVIEW": "⚠️ **REVIEW THEN MERGE** — Breaking changes detected. Review changelog and affected files, then merge.",
-        "BUILD_FAILS": "❌ **DO NOT MERGE** — Build fails. Fix build issues before merging.",
-        "BLOCKED": "🔴 **BLOCKED** — Critical issues detected. Manual investigation required."
+    return {
+        "status": status,
+        "bullets": bullets,
+        "is_breaking": is_breaking,
+        "available": available
     }
-    
-    action = recommendations.get(verdict, "⚠️ **REVIEW** — Manual review recommended.")
-    
-    section = f"""### 🎯 Final Recommendation
-{action}
 
-**Next Steps:**
-"""
-    
-    if verdict == "SAFE":
-        section += "1. Auto-merge via Dependabot\n"
-        section += "2. Monitor post-merge CI/CD for any issues\n"
-    elif verdict == "REVIEW":
-        section += "1. Review the changelog above\n"
-        section += "2. Check affected callsites in reachability section\n"
-        section += "3. Verify behavioral changes are acceptable\n"
-        section += "4. Merge after review\n"
-    elif verdict in ["BUILD_FAILS", "BLOCKED"]:
-        section += "1. Fix build issues first\n"
-        section += "2. Re-run analysis after fixes\n"
-        section += "3. Do not merge until build is green\n"
-    
-    section += "\n---\n"
-    
-    return section
 
-def format_probe_section(pr: Dict[str, Any]) -> str:
-    """Format behavioral probe section with SHA256 and reproduction."""
-    # Try behavioral_grade first (differential-probe.py output), then fallback to deterministic.probe
-    probe = pr.get("behavioral_grade") or pr.get("deterministic", {}).get("probe", {})
-    
-    if not probe:
-        return "### 🔬 Behavioral Probe\n**Status:** ⬜ **NOT RUN**\n\n---\n"
-    
-    # Handle both behavioral_grade and deterministic.probe formats
-    old_sha = probe.get("old_sha256", "N/A")[:16] if "old_sha256" in probe else "N/A"
-    new_sha = probe.get("new_sha256", "N/A")[:16] if "new_sha256" in probe else "N/A"
-    same = old_sha == new_sha or probe.get("same_behavior", False)
-    
-    status_emoji = "✅" if same else "⚠️"
-    status_text = "SAME" if same else "DIFFERENT"
-    
-    pkg = pr.get("package")
-    from_ver = pr.get("from")
-    to_ver = pr.get("to")
-    
-    section = f"""### 🔬 Behavioral Probe ⭐
-**Status:** {status_emoji} **{status_text}** | **Method:** npm runtime-shape diff | **Grade:** HIGH
-
-**Runtime Verification:**
-- Old version SHA256: `{old_sha}`
-- New version SHA256: `{new_sha}`
-- Export shape: **{'UNCHANGED' if same else 'CHANGED'}**
-
-**What this means:**
-"""
-    if same:
-        section += "Runtime probe confirms the package behaves identically. No behavioral breaking changes detected.\n"
-    else:
-        section += """Runtime SHA256 mismatch proves behavioral changes are real, not just TypeScript type changes.
-The package restructuring causes measurable runtime differences.
-
-**Impact:** The probe provides independent confirmation beyond API diff. This catches:
-- Implementation bugs
-- Loader incompatibilities  
-- Package.json misconfiguration
-- Hidden behavioral changes not declared in changelog
-"""
-    
-    # Add reproduction steps
-    section += f"""
-**Independent verification:**
-```bash
-# You can reproduce this probe locally:
-cd /tmp
-npm init -y
-npm install {pkg}@{from_ver}
-node -p "Object.keys(require('{pkg}')).sort().join(', ')"
-npm install {pkg}@{to_ver}
-node -p "Object.keys(require('{pkg}')).sort().join(', ')"
-# Compare outputs and compute SHA256 of export shapes
-node -e "const u=require('{pkg}'); const c=require('crypto'); console.log(c.createHash('sha256').update(JSON.stringify(Object.keys(u).sort())).digest('hex').slice(0,16))"
-```
-
----
-"""
-    return section
-
-def format_independent_verification(pr: Dict[str, Any]) -> str:
-    """Format independent verification resources section."""
-    pkg = pr.get("package")
-    from_ver = pr.get("from")
-    to_ver = pr.get("to")
-    
-    return f"""### 📚 Independent Verification Resources
-
-**For developers who want to verify this analysis:**
-
-1. **Changelog Source:**
-   - Latest Release: https://github.com/search?q=repo:{pkg}+path:CHANGELOG&type=code
-   - All Releases: https://github.com/{pkg}/releases
-
-2. **API Diff Tool:**
-   ```bash
-   # Run locally:
-   npx npm-diff-ts {pkg}@{from_ver} {pkg}@{to_ver}
-   
-   # Or compare exports:
-   npm view {pkg}@{from_ver} exports
-   npm view {pkg}@{to_ver} exports
-   ```
-
-3. **Behavioral Probe (reproduce):**
-   ```bash
-   cd /tmp && npm init -y
-   
-   # Install old version, inspect runtime:
-   npm install {pkg}@{from_ver}
-   node -e "const u=require('{pkg}'); console.log(Object.keys(u).sort())"
-   
-   # Install new version, compare:
-   npm install {pkg}@{to_ver}
-   node -e "const u=require('{pkg}'); console.log(Object.keys(u).sort())"
-   ```
-
-4. **Reachability Check:**
-   ```bash
-   # Search all imports:
-   git grep -n "from '{pkg}'" src/
-   git grep -n "require('{pkg}')" src/
-   ```
-
-5. **Analysis Run Logs:**
-   - GitHub Actions: {pr.get('analysis_run_url', 'https://github.com/actions')}
-   - Build results JSON: Available in Actions artifacts
-
----
-"""
-
-def _format_build_signal(build: Dict) -> str:
-    verdict = build.get("verdict", "unknown")
-    return {"pass": "✅ PASS", "fail": "❌ FAIL", "pre_existing": "⚠️ PRE-EXISTING"}.get(verdict, "⬜ UNKNOWN")
-
-def _format_test_signal(test: Dict) -> str:
+def _normalize_test(test: Dict) -> Dict[str, Any]:
     if not test:
-        return "⬜ SKIPPED"
+        return {"verdict": "skip", "exit_code": -1, "ran": False, "reason": "No test data"}
+
+    if "ran" in test:
+        ran = test.get("ran", False)
+        exit_code = test.get("exit")
+        if exit_code is None:
+            exit_code = test.get("main_test_exit", -1)
+
+        if not ran:
+            verdict = "skip"
+            reason = test.get("reason", "Tests not executed")
+        elif exit_code == 0:
+            verdict = "pass"
+            reason = "All tests passed"
+        elif exit_code is None:
+            verdict = "skip"
+            reason = "Test execution status unknown"
+        else:
+            verdict = "fail"
+            reason = f"Tests failed with exit code {exit_code}"
+
+        return {"verdict": verdict, "exit_code": exit_code, "ran": ran, "reason": reason}
+
     verdict = test.get("verdict", "skip")
-    return {"pass": "✅ PASS", "fail": "❌ FAIL", "skip": "⬜ SKIPPED"}.get(verdict, "⬜ UNKNOWN")
+    exit_code = test.get("exit_code", -1)
+    reason = test.get("reason", "Test execution status")
+    ran = verdict == "pass" or verdict == "fail"
 
-def _format_api_diff_signal(det: Dict) -> str:
-    changes = det.get("api_changes") or 0
-    if changes == 0:
-        return "✅ CLEAN"
-    return f"⚠️ **BREAKING** ({changes} changes)"
+    return {"verdict": verdict, "exit_code": exit_code, "ran": ran, "reason": reason}
 
-def _format_changelog_signal(det: Dict) -> str:
-    cl = det.get("changelogSignal", {})
-    # Handle both string and dict formats
-    if isinstance(cl, str):
-        if cl == "breaking":
-            return "⚠️ **BREAKING**"
-        elif cl == "clean":
-            return "✅ CLEAN"
-        return "⚪ NOT AVAILABLE"
-    
-    if cl.get("status") == "missing":
-        return "⚪ NOT AVAILABLE"
-    if cl.get("breaking_markers", 0) > 0:
-        return "⚠️ **BREAKING**"
-    return "✅ CLEAN"
 
-def _format_reachability_signal(pr: Dict) -> str:
-    det = pr.get("deterministic", {})
-    files = det.get("import_files", [])
-    reachable = det.get("reachable", False)
-    
-    # Check both reachable flag and import_files list
-    if reachable and files:
-        return f"⚠️ **REACHED** ({len(files)} files)"
-    elif files:
-        return f"⚠️ **REACHED** ({len(files)} files)"
-    return "✅ NOT REACHED"
-
-def _format_probe_signal(pr: Dict) -> str:
-    # Try behavioral_grade first, then deterministic.probe
+def _normalize_probe(pr: Dict) -> Dict[str, Any]:
     probe = pr.get("behavioral_grade") or pr.get("deterministic", {}).get("probe", {})
+
     if not probe:
-        return "⬜ NOT RUN"
-    
-    # Handle both formats
-    if "same_behavior" in probe:
-        return "✅ SAME" if probe.get("same_behavior") else "⚠️ **DIFFERENT**"
-    
-    old_sha = probe.get("old_sha256", "")[:16]
-    new_sha = probe.get("new_sha256", "")[:16]
-    if old_sha and new_sha and old_sha == new_sha:
-        return "✅ SAME"
-    return "⚠️ **DIFFERENT**"
+        return {"state": "NOT_RUN", "same_behavior": None, "evidence": {}}
 
-def _format_ai_signal(pr: Dict) -> str:
-    # Try ai_adjudication first, then ai_verdict for backward compat
-    ai = pr.get("ai_adjudication") or pr.get("ai_verdict", {})
-    if not ai:
-        return "⬜ NOT-APPLICABLE"
-    
-    # Handle both formats
-    if "applied" in ai:
-        applied = ai.get("applied", "")
-        if applied == "downgrade_to_safe":
-            return "✅ SAFE"
-        elif applied == "needs_change":
-            return "⚠️ REVIEW"
-    
-    return ai.get("verdict", "REVIEW")
+    same_behavior = probe.get("same_behavior")
 
-def _get_evidence_summary(pr: Dict, layer: str) -> str:
-    """Get brief evidence for signal table."""
-    if "Build" in layer:
-        build = pr.get("build", {})
-        return build.get("verdict", "unknown").replace("_", " ")
-    elif "Test" in layer:
-        test = pr.get("test", {})
-        if not test or test.get("verdict") == "skip":
-            return "Not run"
-        return "Passed" if test.get("verdict") == "pass" else "Failed"
-    elif "API" in layer:
-        return f"{(pr.get('deterministic', {}).get('api_changes') or 0)} symbols"
-    elif "Changelog" in layer:
-        cl = pr.get("deterministic", {}).get("changelogSignal", {})
-        # Handle both string and dict formats
-        if isinstance(cl, str):
-            return "Breaking" if cl == "breaking" else "Clean"
-        return "Breaking markers found" if cl.get("breaking_markers") else "Clean"
-    elif "Reachability" in layer:
-        det = pr.get("deterministic", {})
-        files = det.get("import_files", [])
-        return f"{len(files)} file(s)" if files else "Not imported"
-    elif "Probe" in layer:
-        probe = pr.get("behavioral_grade") or pr.get("deterministic", {}).get("probe", {})
-        if probe:
-            if "same_behavior" in probe:
-                return "Behavior changed" if not probe["same_behavior"] else "Behavior same"
-            old = probe.get("old_sha256", "")[:16]
-            new = probe.get("new_sha256", "")[:16]
-            return "SHA256 mismatch" if old != new else "SHA256 match"
-        return "Not run"
-    elif "AI" in layer:
-        return "Human review required"
-    return ""
+    if same_behavior is None:
+        behavior_changed = probe.get("behavior_changed") or probe.get("changed_behavior")
+        if behavior_changed is True:
+            same_behavior = False
+        elif behavior_changed is False:
+            same_behavior = True
+        elif behavior_changed == "unverified":
+            same_behavior = None
 
-def _count_warning_signals(signals: List) -> str:
-    warnings = sum(1 for _, result, _ in signals if "⚠️" in result or "❌" in result)
-    total = len([s for s in signals if "⬜" not in s[1]])
-    return f"{warnings}/{total}"
+    if same_behavior is None and "different" in probe:
+        different = probe.get("different")
+        if different is True:
+            same_behavior = False
+        elif different is False:
+            same_behavior = True
+
+    if same_behavior is True:
+        state = "SAME"
+    elif same_behavior is False:
+        state = "DIFFERENT"
+    else:
+        old_sha = probe.get("old_sha256", "")[:16]
+        new_sha = probe.get("new_sha256", "")[:16]
+        if old_sha and new_sha:
+            if old_sha == new_sha:
+                state = "SAME"
+                same_behavior = True
+            else:
+                state = "DIFFERENT"
+                same_behavior = False
+        else:
+            state = "NOT_RUN"
+
+    return {
+        "state": state,
+        "same_behavior": same_behavior,
+        "evidence": probe
+    }
+
+
+def _normalize_reachability(pr: Dict) -> Dict[str, Any]:
+    det = pr.get("deterministic") or {}
+    usages = det.get("usages")
+    if not isinstance(usages, list):
+        usages = []
+    import_files = det.get("files_importing")
+    if not isinstance(import_files, list):
+        import_files = []
+    reached = len(usages) > 0
+    return {"usages": usages, "import_files": import_files, "reached": reached}
+
+
+# ── Helpers ───────────────────────────────────────────────────────────────────
+
+def _merge_risk_tag(pr: Dict[str, Any]) -> str:
+    warning_count = 0
+    signals = []
+    probe = _normalize_probe(pr)
+    reach = _normalize_reachability(pr)
+    build = pr.get("build", {})
+    test = pr.get("test", {})
+    det = pr.get("deterministic", {})
+    changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
+
+    if build.get("verdict") == "fail":
+        warning_count += 1
+        signals.append("build fail")
+    if test.get("verdict") == "fail" or test.get("exit_code", 0) != 0:
+        warning_count += 1
+        signals.append("test fail")
+    if probe["state"] == "DIFFERENT":
+        warning_count += 1
+        signals.append("probe DIFFERENT")
+    if reach.get("reached"):
+        warning_count += 1
+        signals.append("reachable")
+    if changelog_norm["is_breaking"]:
+        warning_count += 1
+        signals.append("changelog breaking")
+
+    if warning_count >= 3:
+        risk = "High"
+        conf = "L4"
+    elif warning_count >= 1:
+        risk = "Medium"
+        conf = "L3"
+    else:
+        risk = "Low"
+        conf = "L2"
+
+    evidence = " + ".join(signals) if signals else "all signals clean"
+    return f"**Merge Risk:** {risk} (Evidence: {evidence} · Confidence: {conf})"
+
 
 def _get_recommendation(pr: Dict) -> str:
-    verdict = pr.get("verdict_v2", {}).get("verdict", "REVIEW")
-    if verdict == "SAFE":
-        return "Safe to merge. Build passes and no breaking changes detected."
-    elif verdict == "BUILD_FAILS":
+    verdict_norm = _normalize_verdict(pr)
+    verdict = verdict_norm["verdict"]
+    pkg = pr.get("package", "unknown")
+    dep_type = pr.get("dep_type", "dependency")
+    probe = _normalize_probe(pr)
+    reach_norm = _normalize_reachability(pr)
+    reached = reach_norm["reached"]
+    files = reach_norm["import_files"]
+    det = pr.get("deterministic", {})
+    changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
+
+    if verdict in ("BUILD_FAILS", "BLOCKED"):
+        build = pr.get("build", {})
+        if build.get("verdict") == "pre_existing":
+            return "Build has pre-existing failures (not caused by this upgrade). Review build infra separately."
         return "Fix build errors before merging."
-    else:
-        pkg = pr.get("package")
-        det = pr.get("deterministic", {})
-        files = det.get("import_files", [])
-        file_ref = files[0] if files else "affected code"
-        return f"Review the changelog and verify callsites at `{file_ref}` are compatible, then merge."
 
-def _get_build_confidence(build: Dict) -> str:
-    verdict = build.get("verdict", "unknown")
-    if verdict == "pass":
-        return "HIGH"
-    elif verdict == "pre_existing":
-        return "MEDIUM"
-    return "LOW"
+    if verdict == "SAFE":
+        if dep_type in ("dev", "devDependency", "devDependencies"):
+            return "Safe to merge — dev dependency with no production impact."
+        if not reached:
+            return "Safe to merge — not imported by production code."
+        if probe["state"] == "SAME":
+            return "Safe to merge — behavioral probe confirms identical runtime behavior."
+        return "Safe to merge. Build passes and no breaking changes detected."
 
-def _get_build_confidence_reason(build: Dict) -> str:
-    verdict = build.get("verdict", "unknown")
-    if verdict == "pass":
-        return "Build passes with no new errors"
-    elif verdict == "pre_existing":
-        return "Pre-existing errors not caused by this upgrade"
-    return "Build verification incomplete"
+    parts = []
+    if changelog_norm["is_breaking"]:
+        bullets = changelog_norm["bullets"]
+        if bullets:
+            parts.append(f"Review changelog breaking changes ({bullets[0][:80]})")
+        else:
+            parts.append("Review the changelog for breaking changes")
 
-def _get_test_confidence(test: Dict) -> str:
-    if not test:
-        return "LOW"
-    verdict = test.get("verdict", "skip")
-    return "HIGH" if verdict == "pass" else "LOW"
+    if probe["state"] == "DIFFERENT":
+        parts.append("verify behavioral changes are compatible with your usage")
 
-def render_pr_comment(pr: Dict[str, Any]) -> str:
-    """Render complete PR comment in gold standard format (13 sections)."""
-    sections = [
-        format_verdict_header(pr),           # 1. Header with verdict
-        format_signal_summary(pr),           # 2. Signal summary table
-        format_build_analysis(pr),           # 3. Build analysis
-        format_test_analysis(pr),            # 4. Test analysis
-        format_api_diff_analysis(pr),        # 5. API diff analysis
-        format_changelog_analysis(pr),       # 6. Changelog analysis
-        format_reachability_analysis(pr),    # 7. Reachability analysis
-        format_probe_section(pr),            # 8. Behavioral probe
-        format_ai_arbiter_section(pr),       # 9. AI arbiter layer
-        format_policy_decision(pr),          # 10. Policy decision
-        format_final_recommendation(pr),     # 11. Final recommendation
-        format_independent_verification(pr)  # 12. Independent verification
-    ]
-    
-    footer = f"""
-📋 **Merge Plan:** [#{pr.get('merge_plan_issue', 'TBD')}](TBD)  
-🔗 **Analysis Run:** [Actions]({pr.get('analysis_run_url', 'https://github.com/actions')})  
-🔬 **Mode:** Deterministic + Behavioral Probe · **Model:** {pr.get('ai_model', 'claude-sonnet-4.5')} · **Analyzed:** {pr.get('analyzed_at', 'TBD')}
+    if reached and files:
+        file_ref = (f"`{files[0]}`" if len(files) == 1
+                    else f"`{files[0]}` and {len(files)-1} other file(s)")
+        parts.append(f"check callsites in {file_ref}")
+    elif reached:
+        parts.append("verify affected callsites are compatible")
 
----
+    if not parts:
+        parts.append(f"Review the changelog for {pkg}")
 
-**💡 About this analysis:**
-This comment was generated by the Breakability Pipeline, which combines 7 independent evidence layers to provide high-confidence merge recommendations. The goal is to reduce developer review time by 85% while maintaining zero false-greens.
-"""  # 13. Footer
-    
-    return "\n".join(sections) + footer
+    return ". ".join(parts).rstrip(".") + ", then merge."
 
-def main():
-    if len(sys.argv) < 2:
-        print("Usage: breakability_analyst.py <build-results.json>", file=sys.stderr)
-        sys.exit(1)
-    
-    results_file = sys.argv[1]
-    with open(results_file) as f:
-        data = json.load(f)
-    
-    results = data.get("results", [])
-    if not results:
-        print("No results found in build-results.json", file=sys.stderr)
-        sys.exit(1)
-    
-    for pr in results:
-        pr_num = pr.get("pr_num")
-        if not pr_num:
-            continue
-        
-        comment = render_pr_comment(pr)
-        
-        # Write to file for review (actual posting done by calling script)
-        output_file = f"/tmp/pr-{pr_num}-comment.md"
-        with open(output_file, "w") as f:
-            f.write(comment)
-        
-        print(f"✅ Rendered PR #{pr_num} comment to {output_file}")
-
-if __name__ == "__main__":
-    main()
-
-# Phase 3: Helper functions for actionability
-
-def _guess_compatibility(pr: Dict) -> str:
-    """Guess compatibility based on usage patterns."""
-    bump = pr.get("bump", "unknown")
-    api_changes = pr.get("deterministic", {}).get("api_changes", 0)
-    
-    if bump == "patch" and api_changes == 0:
-        return "HIGH (patch with no API changes usually safe)"
-    elif bump == "minor":
-        return "MEDIUM (minor should be backward compatible)"
-    elif api_changes > 10:
-        return "LOW (many API changes, verify carefully)"
-    return "MEDIUM (review recommended)"
-
-def _estimate_review_time(pr: Dict) -> str:
-    """Estimate developer review time."""
-    files = pr.get("deterministic", {}).get("import_files", [])
-    api_changes = pr.get("deterministic", {}).get("api_changes", 0)
-    
-    if len(files) <= 1 and api_changes <= 5:
-        return "5-10 minutes (single callsite, straightforward API)"
-    elif len(files) <= 3 and api_changes <= 20:
-        return "15-30 minutes (few callsites, moderate changes)"
-    else:
-        return "30-60 minutes (multiple callsites or complex changes)"
-
-def _calculate_evidence_strength(pr: Dict) -> str:
-    """Calculate overall evidence strength."""
-    layers = _count_evidence_layers(pr)
-    
-    if layers >= 5:
-        return "HIGH"
-    elif layers >= 3:
-        return "MEDIUM-HIGH"
-    elif layers >= 2:
-        return "MEDIUM"
-    return "LOW"
 
 def _count_evidence_layers(pr: Dict) -> int:
-    """Count how many independent evidence layers provided data."""
     count = 0
-    
     if pr.get("build", {}).get("verdict"):
         count += 1
     if pr.get("test", {}).get("verdict") not in [None, "skip"]:
@@ -854,85 +278,233 @@ def _count_evidence_layers(pr: Dict) -> int:
         count += 1
     if pr.get("ai_adjudication"):
         count += 1
-    
     return count
 
-def _get_matched_rule(pr: Dict) -> str:
-    """Explain which precedence rule matched."""
-    verdict = pr.get("verdict_v2", {}).get("verdict", "REVIEW")
-    
+
+# ── Compact renderer ─────────────────────────────────────────────────────────
+
+def _synthesize_explanation(pr: Dict) -> str:
+    """Generate plain-English explanation from signal data.
+    Deterministic replacement for the AI arbiter layer."""
+    parts = []
+    verdict_norm = _normalize_verdict(pr)
+    verdict = verdict_norm["verdict"]
     build = pr.get("build", {})
-    if build.get("verdict") == "fail":
-        return "Line 1 (Build Failures → BLOCKED)"
-    
-    cve = pr.get("deterministic", {}).get("cve")
-    if cve and cve.get("found"):
-        return "Line 2 (Security/CVE → BLOCKED)"
-    
-    probe = pr.get("behavioral_grade") or pr.get("deterministic", {}).get("probe", {})
-    if probe.get("same_behavior") == False or probe.get("different"):
-        return "Line 3 (Probe DIFFERENT → REVIEW)"
-    
+    probe = _normalize_probe(pr)
+    reach = _normalize_reachability(pr)
     det = pr.get("deterministic", {})
-    if det.get("reachable") and ((det.get("api_changes") or 0) > 0 or det.get("changelogSignal") == "breaking"):
-        return "Line 4 (Reached + Breaking → REVIEW)"
-    
-    ai = pr.get("ai_adjudication")
-    if ai and ai.get("applied") == "downgrade_to_safe":
-        return "Line 5 (AI Downgrade → SAFE)"
-    
-    return "Line 6 (Default → SAFE)"
+    changelog_norm = _normalize_changelog(det)
+    dep_type = pr.get("dep_type", "dependency")
 
-def _explain_confidence(conf: str, layer: str, pr: Dict) -> str:
-    """Explain why confidence is at this level."""
-    if layer == "build":
-        if conf == "HIGH":
-            return "(full build + tests pass)"
-        elif conf == "MEDIUM":
-            return "(dep resolution only, no tests)"
-        return "(no evidence)"
-    elif layer == "test":
-        if conf == "HIGH":
-            return "(all tests pass)"
-        elif conf == "LOW":
-            return "(tests skipped)"
-        return "(no tests)"
-    elif layer == "probe":
-        if conf == "HIGH":
-            return "(independent runtime verification)"
-        return "(not run)"
-    return ""
+    if build.get("verdict") == "pass":
+        parts.append("Build passes with all dependencies resolving.")
+    elif build.get("verdict") == "fail":
+        parts.append("Build fails — fix build errors before merging.")
+    elif build.get("verdict") == "pre_existing":
+        parts.append("Build has pre-existing failures not caused by this upgrade.")
 
-def _assess_breaking_risk(pr: Dict) -> str:
-    """Assess breaking change risk."""
-    api_changes = pr.get("deterministic", {}).get("api_changes", 0)
-    files = pr.get("deterministic", {}).get("import_files", [])
-    
-    if api_changes > 10 and len(files) > 3:
-        return "**HIGH** (many API changes + multiple callsites)"
-    elif api_changes > 5 or len(files) > 1:
-        return "**MEDIUM** (some changes + few callsites)"
-    elif len(files) == 1:
-        return "**LOW** (single callsite, easy to verify)"
-    return "**NONE** (not reached or no API changes)"
+    if verdict == "SAFE":
+        if dep_type in ("dev", "devDependency", "devDependencies"):
+            parts.append("Dev dependency with no production impact.")
+        elif not reach["reached"]:
+            parts.append("Package is not imported by production code.")
+        elif probe["state"] == "SAME":
+            parts.append("Behavioral probe confirms runtime exports are identical.")
+        else:
+            parts.append("No breaking changes detected.")
+        if changelog_norm["is_breaking"] and changelog_norm["bullets"]:
+            bullet = changelog_norm["bullets"][0]
+            if len(bullet) > 100:
+                bullet = bullet[:97] + "..."
+            parts.append(f"Changelog notes: {bullet}")
+            if not reach["reached"]:
+                parts.append("Package is unreachable so this has no production impact.")
+    elif verdict == "REVIEW":
+        if probe["state"] == "DIFFERENT":
+            parts.append("Behavioral probe confirms runtime behavior has changed.")
+        if changelog_norm["is_breaking"] and changelog_norm["bullets"]:
+            bullet = changelog_norm["bullets"][0]
+            if len(bullet) > 100:
+                bullet = bullet[:97] + "..."
+            parts.append(f"Changelog: {bullet}")
+        if reach["reached"]:
+            files = reach["import_files"]
+            if files:
+                parts.append(f"Package is imported by {len(files)} production file(s) — verify callsite compatibility.")
+    elif verdict in ("BUILD_FAILS", "BLOCKED"):
+        parts.append("Resolve build issues before this upgrade can proceed.")
 
-def _assess_regression_risk(pr: Dict) -> str:
-    """Assess regression risk."""
-    probe = pr.get("behavioral_grade") or pr.get("deterministic", {}).get("probe", {})
-    test = pr.get("test", {})
-    
-    if probe and not probe.get("same_behavior", True):
-        return "**MEDIUM** (probe confirms behavior changed)"
-    elif test.get("verdict") == "pass":
-        return "**LOW** (tests pass, behavior verified)"
-    return "**MEDIUM** (insufficient testing, unknown behavior)"
+    return " ".join(parts) if parts else "Review required for this upgrade."
 
-def _assess_security_risk(pr: Dict) -> str:
-    """Assess security risk."""
-    cve = pr.get("deterministic", {}).get("cve")
-    
-    if cve and cve.get("found"):
-        severity = cve.get("severity", "UNKNOWN").upper()
-        return f"**{severity}** (CVE detected, see security section)"
-    return "**NONE** (no CVEs, but stay current for future patches)"
 
+def _render_compact(pr: Dict) -> str:
+    """Render a compact PR comment (~40 lines)."""
+    from datetime import date
+
+    verdict_norm = _normalize_verdict(pr)
+    verdict = verdict_norm["verdict"]
+    pkg = pr.get("package", "unknown")
+    from_ver = pr.get("from", "?")
+    to_ver = pr.get("to", "?")
+    bump = pr.get("bump", "unknown")
+    dep_type = pr.get("dep_type", "dependency")
+
+    emoji = {"SAFE": "✅", "REVIEW": "🟠", "BUILD_FAILS": "❌", "BLOCKED": "🔴"}.get(verdict, "⚠️")
+    merge_risk = _merge_risk_tag(pr)
+
+    build = pr.get("build", {})
+    build_v = build.get("verdict", "unknown")
+    build_icon = {"pass": "✅", "fail": "❌", "pre_existing": "⚠️"}.get(build_v, "⬜")
+
+    test_norm = _normalize_test(pr.get("test", {}))
+    test_icon = {"pass": "✅", "fail": "❌", "skip": "⬜"}.get(test_norm["verdict"], "⬜")
+    test_suffix = f" (exit {test_norm['exit_code']})" if test_norm["verdict"] == "fail" else ""
+
+    probe = _normalize_probe(pr)
+    probe_state_display = probe["state"].lower().replace("_", " ")
+    probe_icon = {"SAME": "✅", "DIFFERENT": "⚠️"}.get(probe["state"], "⬜")
+
+    det = pr.get("deterministic", {})
+    reach = _normalize_reachability(pr)
+    changelog_norm = _normalize_changelog(det)
+    api_changes = det.get("api_changes") or 0
+
+    reach_file_count = len(reach["import_files"]) or len(set(u.get("file", "") for u in reach["usages"]))
+    reach_text = f"{reach_file_count} files" if reach["reached"] else "not reached"
+    cl_icon = "⚠️" if changelog_norm["is_breaking"] else "✅" if changelog_norm["available"] else "⬜"
+    cl_text = "breaking" if changelog_norm["is_breaking"] else "clean" if changelog_norm["available"] else "n/a"
+
+    explanation = _synthesize_explanation(pr)
+    recommendation = _get_recommendation(pr)
+
+    lines = [
+        f"## {emoji} {verdict} — `{pkg}` {from_ver} → {to_ver} · {dep_type} · {bump}",
+        merge_risk,
+        "",
+        f"**Build:** {build_icon} {build_v} · **Tests:** {test_icon} {test_norm['verdict']}{test_suffix} · **Probe:** {probe_icon} {probe_state_display}",
+        f"**Reachability:** {reach_text} · **Changelog:** {cl_icon} {cl_text} · **API Diff:** {api_changes} changes",
+        "",
+        "### What this means",
+        explanation,
+        "",
+        f"**Recommendation:** {recommendation}",
+        "",
+    ]
+
+    cl_detail = changelog_norm["bullets"][0][:80] if changelog_norm["bullets"] else changelog_norm["status"]
+    probe_detail = "behavior unchanged" if probe["state"] == "SAME" else "behavior changed" if probe["state"] == "DIFFERENT" else "—"
+    test_detail = test_norm["reason"] if test_norm["verdict"] != "pass" else f"exit {test_norm['exit_code']}"
+
+    lines += [
+        "<details><summary>📋 Evidence layers</summary>",
+        "",
+        "| Layer | Signal | Detail |",
+        "|-------|--------|--------|",
+        f"| Build | {build_icon} {build_v} | exit {build.get('pr_exit', build.get('main_exit', '?'))} |",
+        f"| Tests | {test_icon} {test_norm['verdict']} | {test_detail} |",
+        f"| API Diff | {'⚠️ breaking' if api_changes > 0 else '✅ clean'} | {api_changes} symbol(s) |",
+        f"| Changelog | {cl_icon} {cl_text} | {cl_detail} |",
+        f"| Reachability | {'⚠️ reached' if reach['reached'] else '✅ not reached'} | {reach_file_count} imports |",
+        f"| Probe | {probe_icon} {probe_state_display} | {probe_detail} |",
+        "",
+        "</details>",
+        "",
+    ]
+
+    build_output = build.get("output_tail", "")
+    if build_output:
+        lines += [
+            "<details><summary>🔨 Build output</summary>",
+            "",
+            "```",
+            build_output[:500],
+            "```",
+            "",
+            "</details>",
+            "",
+        ]
+
+    import_list = reach["import_files"]
+    if not import_list and reach["usages"]:
+        import_list = sorted(set(u.get("file", "") for u in reach["usages"] if u.get("file")))
+    if import_list:
+        lines.append(f"<details><summary>📁 Files importing this package ({len(import_list)})</summary>")
+        lines.append("")
+        for f in import_list[:10]:
+            lines.append(f"- `{f}`")
+        if len(import_list) > 10:
+            lines.append(f"- ... and {len(import_list) - 10} more")
+        lines += ["", "</details>", ""]
+
+    if changelog_norm["is_breaking"] and changelog_norm["bullets"]:
+        lines.append("<details><summary>📋 Changelog breaking changes</summary>")
+        lines.append("")
+        for b in changelog_norm["bullets"][:5]:
+            lines.append(f"- {b}")
+        lines += ["", "</details>", ""]
+
+    lines += [
+        "---",
+        f"🔬 Deterministic + Probe · 📅 {date.today().isoformat()}",
+    ]
+
+    return "\n".join(lines)
+
+
+def render_pr_comment(pr: Dict[str, Any]) -> str:
+    """Render compact PR comment (~40 lines)."""
+    return _render_compact(pr)
+
+
+# ── CLI ───────────────────────────────────────────────────────────────────────
+
+def main():
+    import argparse
+    parser = argparse.ArgumentParser(description="Render breakability analysis PR comments")
+    parser.add_argument("build_results", help="Path to build-results.json")
+    parser.add_argument("--pr", type=str, help="Render only specific PR number")
+    parser.add_argument("--stdout", action="store_true", help="Write to stdout instead of files")
+    args = parser.parse_args()
+
+    with open(args.build_results) as f:
+        data = json.load(f)
+
+    prs_dict = data.get("prs", {})
+    results_array = data.get("results", [])
+
+    if prs_dict:
+        results = []
+        for pr_num_str, pr_data in prs_dict.items():
+            if isinstance(pr_data, dict):
+                pr_data.setdefault("pr_num", pr_num_str)
+                results.append(pr_data)
+    elif results_array:
+        results = results_array
+    else:
+        print("No results found in build-results.json (checked 'prs' dict and 'results' array)", file=sys.stderr)
+        sys.exit(1)
+
+    if args.pr:
+        results = [pr for pr in results if str(pr.get("pr_num")) == args.pr]
+        if not results:
+            print(f"PR #{args.pr} not found in results", file=sys.stderr)
+            sys.exit(1)
+
+    for pr in results:
+        pr_num = pr.get("pr_num")
+        if not pr_num:
+            continue
+
+        comment = render_pr_comment(pr)
+
+        if args.stdout:
+            print(comment)
+        else:
+            output_file = f"/tmp/pr-{pr_num}-comment.md"
+            with open(output_file, "w") as f:
+                f.write(comment)
+            print(f"✅ Rendered PR #{pr_num} comment to {output_file}")
+
+
+if __name__ == "__main__":
+    main()
