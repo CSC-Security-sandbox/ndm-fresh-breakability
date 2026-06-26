@@ -2384,6 +2384,10 @@ if not isinstance(_usages, list):
 # without an explicit import, so zero direct imports is NOT proof of no reachability.
 if not _files_importing and not '$PKG'.startswith('@types/'):
     _usages = []
+# Ambient @types packages: mark as reached with synthetic entry
+_ambient_types = {'@types/node', '@types/jest', '@types/mocha', '@types/chai'}
+if not _files_importing and '$PKG' in _ambient_types:
+    _files_importing = ['(ambient type declarations)']
 
 neg = re.compile(r'\b(no|not|without|non[-\s]?breaking|does not|did not)\b.{0,80}\b(api change|breaking|incompatible|removed|behavior change)s?\b|\b(api change|breaking change)s?\b.{0,80}\b(no|not|without|none)\b', re.I)
 sig = data.get('changelogSignal')
@@ -3703,7 +3707,7 @@ if eco == "gomod":
 try:
     with open(f"/tmp/_bc_extra_infra_{pr_num}.txt") as f:
         extra_raw = f.read()
-except:
+except (IOError, OSError):
     extra_raw = ""
 for line in extra_raw.strip().split('\n'):
     line = line.strip()

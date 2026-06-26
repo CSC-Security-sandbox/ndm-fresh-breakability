@@ -145,10 +145,21 @@ def _policy_decision(pr: Mapping[str, Any]) -> dict:
 
 def _hard_fix_floor(pr: Mapping[str, Any]) -> bool:
     """States that MUST be FIX/BLOCKED and can never be downgraded (false-green floor):
-    a build that does not compile, or a policy decision that introduced a security finding.
+    a build that does not compile, new build errors introduced, test failures,
+    or a policy decision that introduced a security finding.
     """
-    if (pr.get("build") or {}).get("verdict") == "fail":
+    build_verdict = (pr.get("build") or {}).get("verdict", "")
+    if build_verdict in ("fail", "pre_existing_plus_new"):
         return True
+    test = pr.get("test") or {}
+    test_ran = test.get("ran", False)
+    test_exit = test.get("exit")
+    if test_exit is None:
+        test_exit = test.get("main_test_exit")
+    if test_ran and test_exit is not None and test_exit != 0:
+        output = test.get("output_tail", "")
+        if "no test specified" not in output and "Error: no test specified" not in output:
+            return True
     rc = str(_policy_decision(pr).get("reason_code") or "")
     return rc.startswith("build:") or rc == "security:introduced"
 
@@ -246,12 +257,27 @@ def authoritative_verdict(pr: Mapping[str, Any]) -> dict:
     """
     if _hard_fix_floor(pr):
         dec = _policy_decision(pr)
+        build_verdict = (pr.get("build") or {}).get("verdict", "")
+        test = pr.get("test") or {}
+        test_ran = test.get("ran", False)
+        test_exit = test.get("exit")
+        if test_exit is None:
+            test_exit = test.get("main_test_exit")
+        reasons = []
+        if build_verdict in ("fail", "pre_existing_plus_new"):
+            reasons.append("build failed on the candidate version" if build_verdict == "fail"
+                           else "new build errors introduced by this upgrade")
+        if test_ran and test_exit is not None and test_exit != 0:
+            output = test.get("output_tail", "")
+            if "no test specified" not in output and "Error: no test specified" not in output:
+                reasons.append(f"tests failed (exit {test_exit})")
+        reason = dec.get("display_reason") or dec.get("reason_code") or "; ".join(reasons) or "build failed on the candidate version"
         result = {
             "verdict": BUCKET_BLOCKED,
             "severity": "high",
             "confidence": "L4",
             "priority": "P0",
-            "reason": dec.get("display_reason") or dec.get("reason_code") or "build failed on the candidate version",
+            "reason": reason,
             "source": "hard_fix_floor",
         }
         result["breakability_grade"] = assign_breakability_grade(pr, BUCKET_BLOCKED)
@@ -287,6 +313,19 @@ def authoritative_verdict(pr: Mapping[str, Any]) -> dict:
         mapped["source"] = "policy_lowering"
         mapped["breakability_grade"] = assign_breakability_grade(pr, mapped.get("verdict", BUCKET_REVIEW))
         return _probe_escalation(pr, mapped)
+
+    # Actions ecosystem fast-path: CI-only deps with passing builds are SAFE
+    if str(pr.get("ecosystem", "")).strip().lower() == "actions":
+        build_v = (pr.get("build") or {}).get("verdict", "")
+        if build_v in ("pass", "pre_existing", ""):
+            result = {
+                "verdict": BUCKET_SAFE, "severity": "none", "confidence": "L3",
+                "priority": "P3",
+                "reason": "CI action dependency — no production runtime impact",
+                "source": "actions_fast_path",
+                "breakability_grade": GRADE_SAFE,
+            }
+            return result
 
     # Fallback: use deterministic.merge_risk.tag when no typed verdict exists
     det = pr.get("deterministic") or {}
