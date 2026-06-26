@@ -4,7 +4,7 @@ go 1.26.1
 
 require (
 	github.com/google/uuid v1.6.0
-	github.com/playwright-community/playwright-go v0.5700.1
+	github.com/playwright-community/playwright-go v0.6000.0
 	github.com/stretchr/testify v1.11.1
 	golang.org/x/crypto v0.51.0
 )
