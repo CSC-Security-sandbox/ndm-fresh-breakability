@@ -301,7 +301,7 @@ def _count_evidence_layers(pr: Dict) -> int:
         count += 1
     if pr.get("test", {}).get("verdict") not in [None, "skip"]:
         count += 1
-    if pr.get("deterministic", {}).get("api_changes", 0) > 0:
+    if (pr.get("deterministic", {}).get("api_changes") or 0) > 0:
         count += 1
     if pr.get("deterministic", {}).get("changelogSignal"):
         count += 1
