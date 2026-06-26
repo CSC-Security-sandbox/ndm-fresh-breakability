@@ -96,8 +96,13 @@ def _normalize_test(test: Dict) -> Dict[str, Any]:
             verdict = "skip"
             reason = "Test execution status unknown"
         else:
-            verdict = "fail"
-            reason = f"Tests failed with exit code {exit_code}"
+            output = test.get("output_tail", "")
+            if "no test specified" in output or "Error: no test specified" in output:
+                verdict = "skip"
+                reason = "No test suite configured"
+            else:
+                verdict = "fail"
+                reason = f"Tests failed with exit code {exit_code}"
 
         return {"verdict": verdict, "exit_code": exit_code, "ran": ran, "reason": reason}
 
@@ -177,14 +182,14 @@ def _merge_risk_tag(pr: Dict[str, Any]) -> str:
     probe = _normalize_probe(pr)
     reach = _normalize_reachability(pr)
     build = pr.get("build", {})
-    test = pr.get("test", {})
+    test_norm = _normalize_test(pr.get("test", {}))
     det = pr.get("deterministic", {})
     changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
 
     if build.get("verdict") == "fail":
         warning_count += 1
         signals.append("build fail")
-    if test.get("verdict") == "fail" or test.get("exit_code", 0) != 0:
+    if test_norm["verdict"] == "fail":
         warning_count += 1
         signals.append("test fail")
     if probe["state"] == "DIFFERENT":
