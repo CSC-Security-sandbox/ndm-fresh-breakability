@@ -184,7 +184,7 @@ def _merge_risk_tag(pr: Dict[str, Any]) -> str:
     build = pr.get("build", {})
     test_norm = _normalize_test(pr.get("test", {}))
     det = pr.get("deterministic", {})
-    changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
+    changelog_norm = _normalize_changelog(det)
 
     if build.get("verdict") == "fail":
         warning_count += 1
@@ -226,7 +226,7 @@ def _get_recommendation(pr: Dict) -> str:
     reached = reach_norm["reached"]
     files = reach_norm["import_files"]
     det = pr.get("deterministic", {})
-    changelog_norm = _normalize_changelog(det.get("changelogSignal") or det)
+    changelog_norm = _normalize_changelog(det)
 
     if verdict in ("BUILD_FAILS", "BLOCKED"):
         build = pr.get("build", {})
