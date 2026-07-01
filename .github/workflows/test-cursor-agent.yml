@@ -1,0 +1,202 @@
+name: Test Cursor Agent CLI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  test-agent:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install Cursor agent CLI
+        run: |
+          echo "Installing Cursor agent CLI..."
+          curl -fsS https://cursor.com/install | bash
+          echo "$HOME/.cursor/bin" >> $GITHUB_PATH
+          export PATH="$HOME/.cursor/bin:$PATH"
+          which agent && agent --version || echo "agent not found on PATH"
+
+      # Test 1: Simple prompt via stdin
+      - name: "Test 1: Simple prompt (stdin)"
+        run: |
+          echo "════════ TEST 1: Simple stdin prompt ════════"
+          echo "Respond with exactly one word: HELLO" | agent -p --force --model claude-4.5-sonnet --api-key "$CURSOR_API_KEY" 2>stderr1.txt | tee stdout1.txt
+          echo "--- stdout ($(wc -c < stdout1.txt) bytes) ---"
+          cat stdout1.txt
+          echo "--- stderr ---"
+          cat stderr1.txt
+          [ -s stdout1.txt ] && echo "✅ Test 1 PASSED" || echo "❌ Test 1 FAILED (empty output)"
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        timeout-minutes: 2
+
+      # Test 2: Simple prompt via positional argument
+      - name: "Test 2: Simple prompt (positional arg)"
+        run: |
+          echo "════════ TEST 2: Positional arg prompt ════════"
+          agent -p --force --model claude-4.5-sonnet --api-key "$CURSOR_API_KEY" "Respond with exactly one word: WORLD" 2>stderr2.txt | tee stdout2.txt
+          echo "--- stdout ($(wc -c < stdout2.txt) bytes) ---"
+          cat stdout2.txt
+          echo "--- stderr ---"
+          cat stderr2.txt
+          [ -s stdout2.txt ] && echo "✅ Test 2 PASSED" || echo "❌ Test 2 FAILED (empty output)"
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        timeout-minutes: 2
+
+      # Test 3: Medium prompt via stdin (simulate AI verdict call)
+      - name: "Test 3: Medium prompt via stdin (~2KB)"
+        run: |
+          echo "════════ TEST 3: Medium prompt (~2KB verdict) ════════"
+          cat <<'PROMPT' | agent -p --force --model claude-4.5-sonnet --api-key "$CURSOR_API_KEY" 2>stderr3.txt | tee stdout3.txt
+          You are an AI arbiter analyzing a dependency upgrade for breakability.
+
+          **Package:** axios (1.17.0 → 1.18.0)
+          **Current Verdict:** REVIEW (needs human review)
+
+          **Evidence:**
+          - API Changes: 2 exports changed, 0 removed
+          - Changelog: minor bump, no breaking
+          - Reachability: REACHED (3 files import this)
+          - Behavioral Probe: SAME runtime behavior
+
+          **Output Format (JSON):**
+          ```json
+          {
+            "final_verdict": "SAFE" or "REVIEW",
+            "confidence": "HIGH" or "MEDIUM" or "LOW",
+            "reasoning": "One-sentence explanation"
+          }
+          ```
+          Respond ONLY with the JSON, no other text.
+          PROMPT
+          echo "--- stdout ($(wc -c < stdout3.txt) bytes) ---"
+          cat stdout3.txt
+          echo "--- stderr ---"
+          cat stderr3.txt
+          [ -s stdout3.txt ] && echo "✅ Test 3 PASSED" || echo "❌ Test 3 FAILED (empty output)"
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        timeout-minutes: 3
+
+      # Test 4: Large prompt via stdin (simulate AI comment generation with 73KB prompt)
+      - name: "Test 4: Large prompt via stdin (~5KB comment prompt)"
+        run: |
+          echo "════════ TEST 4: Large prompt (~5KB comment) ════════"
+          python3 -c "
+          prompt = '''You are a breakability analysis tool generating a detailed PR review comment.
+
+          ## PR Data
+          - Package: @nestjs/common
+          - From: 11.1.18
+          - To: 11.1.27
+          - Dependency type: dependencies
+          - Bump: minor
+          - Build result: pass
+          - Verification level: L2_type_checked
+
+          ## Instructions
+          Generate a detailed breakability analysis comment in markdown format with:
+          1. A headline with verdict emoji and package info
+          2. A signal/findings table with | Layer | Result | columns
+          3. An H3 section for 'How we checked' with a checklist
+          4. Numbered recommendations (at least 3)
+          5. A bash code block with a verification command
+          6. A section discussing reachability/import analysis
+          7. A Mode footer line
+
+          The comment should be at least 150 lines long. Include detailed analysis.
+
+          Start with: <!-- breakability-check -->
+          End with: Mode: Deterministic + Behavioral Probe
+
+          Output ONLY the markdown comment.
+          '''
+          print(prompt)
+          " | agent -p --force --model claude-4.5-sonnet --api-key "$CURSOR_API_KEY" 2>stderr4.txt | tee stdout4.txt
+          echo "--- stdout lines: $(wc -l < stdout4.txt), bytes: $(wc -c < stdout4.txt) ---"
+          head -5 stdout4.txt
+          echo "..."
+          tail -5 stdout4.txt
+          echo "--- stderr ---"
+          cat stderr4.txt
+          LINES=$(wc -l < stdout4.txt)
+          if [ "$LINES" -ge 50 ]; then
+            echo "✅ Test 4 PASSED ($LINES lines)"
+          elif [ -s stdout4.txt ]; then
+            echo "⚠️ Test 4 PARTIAL ($LINES lines, expected 150+)"
+          else
+            echo "❌ Test 4 FAILED (empty output)"
+          fi
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+        timeout-minutes: 5
+
+      # Test 5: ai_backend.py preflight check
+      - name: "Test 5: ai_backend.py preflight_check()"
+        run: |
+          echo "════════ TEST 5: ai_backend.py preflight ════════"
+          cd .github/scripts
+          python3 -c "
+          import sys, os
+          sys.path.insert(0, os.getcwd())
+          from ai_backend import Backend
+          b = Backend.from_env()
+          print(f'mode={b.mode} model={b.model} cmd={b.cmd_template} timeout={b.timeout}', file=sys.stderr)
+          ok, err = b.preflight_check()
+          print(f'preflight ok={ok} err={err}', file=sys.stderr)
+          if ok:
+              print('✅ Preflight PASSED')
+          else:
+              print(f'❌ Preflight FAILED: {err}')
+              sys.exit(1)
+          "
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          BRK_AGENT_MODE: live
+          BRK_AGENT_MODEL: claude-4.5-sonnet
+        timeout-minutes: 2
+
+      # Test 6: ai_backend.py invoke() end-to-end
+      - name: "Test 6: ai_backend.py invoke() end-to-end"
+        run: |
+          echo "════════ TEST 6: ai_backend.py invoke ════════"
+          cd .github/scripts
+          python3 -c "
+          import sys, os
+          sys.path.insert(0, os.getcwd())
+          from ai_backend import Backend
+          b = Backend.from_env()
+          result = b.invoke('Say exactly: test-ok', namespace='test', key='smoke')
+          print(f'Result ({len(result)} chars): {result[:200]}', file=sys.stderr)
+          if result:
+              print(f'✅ invoke PASSED ({len(result)} chars)')
+          else:
+              print('❌ invoke FAILED (empty result)')
+              sys.exit(1)
+          "
+        env:
+          CURSOR_API_KEY: ${{ secrets.CURSOR_API_KEY }}
+          BRK_AGENT_MODE: live
+          BRK_AGENT_MODEL: claude-4.5-sonnet
+        timeout-minutes: 3
+
+      - name: Summary
+        if: always()
+        run: |
+          echo "════════ SUMMARY ════════"
+          for i in 1 2 3 4; do
+            if [ -f "stdout${i}.txt" ]; then
+              SIZE=$(wc -c < "stdout${i}.txt")
+              LINES=$(wc -l < "stdout${i}.txt")
+              echo "Test $i: ${SIZE} bytes, ${LINES} lines"
+            else
+              echo "Test $i: not run"
+            fi
+          done
