@@ -319,6 +319,8 @@ def generate_comments(
                     print(f"PR#{pr_num}: AI comment generated ({line_count} lines)", file=sys.stderr)
                     break
                 reason = "validation failed"
+                preview = response[:200].replace('\n', '\\n')
+                print(f"PR#{pr_num}: response preview ({len(response)} chars): {preview}", file=sys.stderr)
             else:
                 reason = f"empty response (0 chars)"
                 print(f"PR#{pr_num}: {reason}", file=sys.stderr)
