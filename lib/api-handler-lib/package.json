@@ -14,7 +14,7 @@
   "author": "Geetha Shree",
   "license": "UNLICENSED",
   "dependencies": {
-    "@types/node": "^22.9.0",
+    "@types/node": "^26.1.0",
     "express": "^5.1.0",
     "nest-winston": "^1.9.7",
     "typescript": "^5.6.3",
