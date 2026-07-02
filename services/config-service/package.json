@@ -61,7 +61,7 @@
   "devDependencies": {
     "@nestjs/cli": "11.0.21",
     "@nestjs/schematics": "11.0.10",
-    "@nestjs/testing": "11.1.18",
+    "@nestjs/testing": "11.1.27",
     "@types/escape-html": "^1.0.4",
     "@types/express": "5.0.0",
     "@types/jest": "^29.5.2",
