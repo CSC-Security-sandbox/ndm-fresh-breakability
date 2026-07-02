@@ -27,7 +27,7 @@
     "@nestjs/config": "4.0.4",
     "@nestjs/core": "11.1.18",
     "@nestjs/platform-express": "11.1.18",
-    "@nestjs/swagger": "11.4.2",
+    "@nestjs/swagger": "11.4.4",
     "@nestjs/typeorm": "11.0.1",
     "@netapp-cloud-datamigrate/api-handler-lib": "0.0.10",
     "@netapp-cloud-datamigrate/auth-lib": "0.1.4",
